@@ -27,6 +27,7 @@ urlpatterns = [
     # API namespaces
     path("api/v1/customer/", include("apps.customer_api.urls", namespace="customer-api")),
     path("api/v1/ops/", include("apps.ops_api.urls", namespace="ops-api")),
+    path("api/v1/ops/analytics/", include("apps.analytics.urls", namespace="analytics")),
     path("api/v1/admin/", include("apps.admin_config.urls", namespace="admin-config")),
 
     # Webhooks
