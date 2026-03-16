@@ -35,8 +35,24 @@ def _get_roam_client():
     return MockRoamClient()
 
 
-class CreateConversationView(APIView):
+class ConversationRootView(APIView):
+    """Handles GET (list) and POST (create) on /conversations/."""
+
     authentication_classes = [FirebaseJWTAuthentication]
+
+    @extend_schema(
+        tags=["Customer - Conversations"],
+        responses={200: ConversationDetailSerializer(many=True)},
+        summary="List conversations for the authenticated user",
+        description="Returns all conversations owned by the authenticated user, ordered by most recent first.",
+    )
+    def get(self, request):
+        conversations = (
+            Conversation.objects.filter(customer_user_id=request.user.uid)
+            .select_related("queue")
+            .order_by("-opened_at")
+        )
+        return Response(ConversationDetailSerializer(conversations, many=True).data)
 
     @extend_schema(
         tags=["Customer - Conversations"],

@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: support_bridge
       POSTGRES_PASSWORD: support_bridge
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 
@@ -34,7 +34,7 @@ services:
 
   celery:
     build: .
-    command: celery -A config.celery worker --loglevel=info
+    command: celery -A config.celery worker --beat --loglevel=info
     volumes:
       - .:/app
     env_file:

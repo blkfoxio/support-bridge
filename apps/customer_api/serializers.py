@@ -39,10 +39,16 @@ class MessageSerializer(serializers.Serializer):
     conversation_id = serializers.UUIDField()
     actor_type = serializers.CharField()
     actor_id = serializers.CharField()
+    sender_name = serializers.SerializerMethodField()
     direction = serializers.CharField()
     body_plain = serializers.CharField()
     message_type = serializers.CharField()
     created_at = serializers.DateTimeField()
+
+    def get_sender_name(self, obj):
+        """Derive a display name from metadata or actor_id."""
+        metadata = getattr(obj, "metadata", {}) or {}
+        return metadata.get("roam_sender_name") or metadata.get("customer_name") or obj.actor_id
 
 
 class ConversationDetailSerializer(serializers.Serializer):

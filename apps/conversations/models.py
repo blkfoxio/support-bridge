@@ -47,6 +47,10 @@ class Conversation(models.Model):
 
     # Roam integration
     roam_thread_key = models.CharField(max_length=255, db_index=True, help_text="threadKey used in Roam API calls")
+    roam_thread_timestamp = models.BigIntegerField(
+        null=True, blank=True,
+        help_text="Roam threadTimestamp for polling chat.history replies",
+    )
 
     # Timestamps
     opened_at = models.DateTimeField(auto_now_add=True)

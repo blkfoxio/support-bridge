@@ -8,10 +8,12 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.audit.models import EventLog
+from apps.customer_api.serializers import MessageSerializer
 from apps.integrations_roam.formatters import format_customer_message, format_root_message
 from apps.messaging.models import ActorType, Message, MessageDirection, MessageSource, MessageType
 from apps.queues.models import QueueGroupMapping
 from apps.routing.services import RoutingService
+from common.sse import SSEPublisher
 
 from .models import Conversation, ConversationStatus, SourceChannel
 
@@ -93,6 +95,7 @@ class ConversationService:
                 source=MessageSource.CUSTOMER_API,
                 body_plain=message_body,
                 message_type=MessageType.TEXT,
+                metadata={"customer_name": customer_name},
             )
 
             # Record event
@@ -131,6 +134,16 @@ class ConversationService:
                 message.external_message_id = str(roam_response.timestamp or "")
                 message.delivered_at = timezone.now()
                 message.save(update_fields=["external_message_id", "delivered_at"])
+
+                # Save the root message timestamp for polling thread replies.
+                # For root messages, chat.post returns the message timestamp
+                # (not threadTimestamp, which is None for root messages).
+                # This timestamp IS the threadTimestamp for fetching replies.
+                thread_ts = roam_response.thread_timestamp or roam_response.timestamp
+                if thread_ts:
+                    conversation.roam_thread_timestamp = thread_ts
+                    conversation.save(update_fields=["roam_thread_timestamp"])
+
                 logger.info("Posted to Roam group=%s thread_key=%s", roam_group_id, conversation.id)
             except Exception:
                 message.failed_at = timezone.now()
@@ -179,6 +192,7 @@ class ConversationService:
             source=MessageSource.CUSTOMER_API,
             body_plain=body,
             message_type=MessageType.TEXT,
+            metadata={"customer_name": conversation.customer_name},
         )
 
         # 4. Update conversation
@@ -217,5 +231,15 @@ class ConversationService:
                 message.failed_at = timezone.now()
                 message.save(update_fields=["failed_at"])
                 logger.exception("Failed to post message to Roam for conversation %s", conversation.id)
+
+        # 7. Publish SSE event for real-time delivery
+        try:
+            SSEPublisher().publish(
+                conversation_id=str(conversation.id),
+                event_type="message.created",
+                data=MessageSerializer(message).data,
+            )
+        except Exception:
+            logger.debug("Failed to publish SSE event for message %s", message.id, exc_info=True)
 
         return message

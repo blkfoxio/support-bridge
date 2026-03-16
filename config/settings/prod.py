@@ -11,3 +11,8 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 X_FRAME_OPTIONS = "DENY"
+
+# CORS — mobile app needs cross-origin access
+INSTALLED_APPS += ["corsheaders"]  # noqa: F405
+MIDDLEWARE.insert(1, "corsheaders.middleware.CorsMiddleware")  # noqa: F405
+CORS_ALLOW_ALL_ORIGINS = True  # Prototype: allow all. Restrict later.

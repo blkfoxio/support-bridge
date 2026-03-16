@@ -77,7 +77,7 @@ ASGI_APPLICATION = "config.asgi.application"
 DATABASE_URL = config("DATABASE_URL", default="postgres://support_bridge:support_bridge@localhost:5432/support_bridge")
 
 # Parse DATABASE_URL
-_db_parts = DATABASE_URL.replace("postgres://", "").split("@")
+_db_parts = DATABASE_URL.replace("postgresql://", "").replace("postgres://", "").split("@")
 _db_credentials = _db_parts[0].split(":")
 _db_host_port_name = _db_parts[1].split("/")
 _db_host_port = _db_host_port_name[0].split(":")
@@ -159,6 +159,12 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"
+CELERY_BEAT_SCHEDULE = {
+    "poll-roam-replies": {
+        "task": "roam.poll_replies",
+        "schedule": 10.0,  # Every 10 seconds
+    },
+}
 
 # Firebase
 FIREBASE_SERVICE_ACCOUNT_KEY = config("FIREBASE_SERVICE_ACCOUNT_KEY", default="")
@@ -166,6 +172,8 @@ FIREBASE_SERVICE_ACCOUNT_KEY = config("FIREBASE_SERVICE_ACCOUNT_KEY", default=""
 # Roam API
 ROAM_API_BASE_URL = config("ROAM_API_BASE_URL", default="https://api.ro.am/v0")
 ROAM_API_TOKEN = config("ROAM_API_TOKEN", default="")
+ROAM_WEBHOOK_SECRET = config("ROAM_WEBHOOK_SECRET", default="")
+ROAM_BOT_USER_ID = config("ROAM_BOT_USER_ID", default="")
 
 # Ops/Admin API Key
 OPS_API_KEY = config("OPS_API_KEY", default="change-me-in-production")
