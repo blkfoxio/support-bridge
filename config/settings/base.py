@@ -176,7 +176,7 @@ FIREBASE_SERVICE_ACCOUNT_KEY = config("FIREBASE_SERVICE_ACCOUNT_KEY", default=""
 
 # Cognito (Cyflare ONE authentication)
 COGNITO_USER_POOL_ID = config("COGNITO_USER_POOL_ID", default="")
-COGNITO_REGION = config("COGNITO_REGION", default="us-east-1")
+COGNITO_REGION = config("COGNITO_AWS_REGION", default="us-east-1")
 
 # Roam API
 ROAM_API_BASE_URL = config("ROAM_API_BASE_URL", default="https://api.ro.am/v0")
