@@ -20,6 +20,20 @@ logger = logging.getLogger(__name__)
 HEARTBEAT_INTERVAL = 25  # seconds
 
 
+async def _verify_cognito_token(token: str):
+    """Verify a Cognito JWT access token and return decoded claims, or None."""
+    try:
+        from common.auth.backends import _decode_cognito_token
+
+        decoded = await sync_to_async(_decode_cognito_token)(token)
+        # Normalize to match Firebase shape: use 'sub' as 'uid'
+        decoded["uid"] = decoded.get("sub", "")
+        return decoded
+    except Exception as e:
+        logger.debug("Cognito token verification failed: %s", e)
+        return None
+
+
 async def _verify_firebase_token(token: str):
     """Verify a Firebase ID token and return the decoded claims, or None."""
     try:
@@ -50,6 +64,14 @@ async def _verify_firebase_token(token: str):
     except Exception as e:
         logger.debug("Firebase token verification failed: %s", e)
         return None
+
+
+async def _verify_token(token: str):
+    """Try Cognito first, then Firebase. Returns decoded claims or None."""
+    decoded = await _verify_cognito_token(token)
+    if decoded is not None:
+        return decoded
+    return await _verify_firebase_token(token)
 
 
 def _format_sse(event: SSEEvent) -> str:
@@ -97,8 +119,8 @@ async def customer_sse_stream(request):
 
     GET /api/v1/customer/stream/?conversation_id=<uuid>
 
-    Requires Firebase Bearer token authentication. The customer can only
-    subscribe to conversations they own.
+    Accepts Cognito or Firebase Bearer token authentication. The customer
+    can only subscribe to conversations they own.
     """
     if request.method != "GET":
         return JsonResponse({"error": "Method not allowed"}, status=405)
@@ -109,7 +131,7 @@ async def customer_sse_stream(request):
         return JsonResponse({"error": "Missing or invalid Authorization header"}, status=401)
 
     token = auth_header[7:]  # Strip "Bearer "
-    decoded = await _verify_firebase_token(token)
+    decoded = await _verify_token(token)
     if decoded is None:
         return JsonResponse({"error": "Invalid or expired token"}, status=401)
 

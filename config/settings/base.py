@@ -117,6 +117,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Django REST Framework
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "common.auth.backends.CognitoJWTAuthentication",
         "common.auth.backends.FirebaseJWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
@@ -172,6 +173,10 @@ CELERY_BEAT_SCHEDULE = {
 
 # Firebase
 FIREBASE_SERVICE_ACCOUNT_KEY = config("FIREBASE_SERVICE_ACCOUNT_KEY", default="")
+
+# Cognito (Cyflare ONE authentication)
+COGNITO_USER_POOL_ID = config("COGNITO_USER_POOL_ID", default="")
+COGNITO_REGION = config("COGNITO_AWS_REGION", default="us-east-1")
 
 # Roam API
 ROAM_API_BASE_URL = config("ROAM_API_BASE_URL", default="https://api.ro.am/v0")
