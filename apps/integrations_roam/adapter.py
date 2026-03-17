@@ -22,7 +22,13 @@ class RoamAdapter(Protocol):
     async def post_message(
         self, chat_id: str, text: str, *, thread_key: str | None = None, markdown: bool = True
     ) -> RoamPostResponse:
-        """Post a message to a chat/group. Use thread_key for threaded replies."""
+        """Post a text message to a chat/group. Use thread_key for threaded replies."""
+        ...
+
+    async def post_blocks(
+        self, chat_id: str, blocks: list[dict], *, color: str | None = None, thread_key: str | None = None
+    ) -> RoamPostResponse:
+        """Post a Block Kit message to a chat/group. Mutually exclusive with text."""
         ...
 
     async def get_chat_history(

@@ -108,6 +108,40 @@ class RoamClient:
         stop=stop_after_attempt(3),
         reraise=True,
     )
+    async def post_blocks(
+        self, chat_id: str, blocks: list[dict], *, color: str | None = None, thread_key: str | None = None
+    ) -> RoamPostResponse:
+        """Post a Block Kit message via /chat.post.
+
+        Args:
+            chat_id: Tagged UUID of the chat/group (C-... or G-...).
+            blocks: List of block objects (max 10). Mutually exclusive with text.
+            color: Left-strip color — "good", "warning", "danger", or "#RRGGBB".
+            thread_key: External thread identifier (max 64 chars).
+        """
+        payload: dict = {"chat": chat_id, "blocks": blocks}
+        if color is not None:
+            payload["color"] = color
+        if thread_key is not None:
+            payload["threadKey"] = thread_key[:64]
+
+        response = await self._client.post("/chat.post", json=payload)
+        _raise_for_status(response)
+        data = response.json()
+
+        return RoamPostResponse(
+            chat=data.get("chat", ""),
+            thread_timestamp=data.get("threadTimestamp"),
+            timestamp=data.get("timestamp"),
+            raw=data,
+        )
+
+    @retry(
+        retry=retry_if_exception_type((RoamRateLimitError, RoamServerError)),
+        wait=wait_exponential(multiplier=1, min=1, max=30),
+        stop=stop_after_attempt(3),
+        reraise=True,
+    )
     async def get_chat_history(
         self, chat_id: str, *, thread_timestamp: int | None = None, limit: int = 50
     ) -> list[RoamMessage]:

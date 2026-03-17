@@ -2,27 +2,30 @@
 
 import logging
 
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from drf_spectacular.utils import extend_schema, OpenApiParameter
-
-from common.auth.backends import ApiKeyAuthentication
 from apps.audit.models import EventLog
+from common.auth.backends import ApiKeyAuthentication
 
-logger = logging.getLogger(__name__)
-
+from .models import BrandingConfig
 from .serializers import (
     AnalystListSerializer,
     AuditEventSerializer,
+    BrandingConfigSerializer,
+    CreateBrandingConfigRequestSerializer,
     CreateQueueGroupMappingRequestSerializer,
     CreateRoutingRuleRequestSerializer,
     QueueGroupMappingSerializer,
     RoutingRuleSerializer,
+    UpdateBrandingConfigRequestSerializer,
     UpdateQueueGroupMappingRequestSerializer,
     UpdateRoutingRuleRequestSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 NOT_IMPLEMENTED = Response(
     {"error": {"code": "not_implemented", "message": "Not yet implemented", "status": 501}},
@@ -166,3 +169,108 @@ class AuditEventListView(APIView):
             "limit": limit,
             "offset": offset,
         })
+
+
+# ---------------------------------------------------------------------------
+# Branding config
+# ---------------------------------------------------------------------------
+
+
+class BrandingConfigListView(APIView):
+    authentication_classes = [ApiKeyAuthentication]
+
+    @extend_schema(
+        tags=["Admin - Config"],
+        responses={200: BrandingConfigSerializer(many=True)},
+        summary="List branding configs",
+    )
+    def get(self, request):
+        configs = BrandingConfig.objects.all().order_by("org_id")
+        serializer = BrandingConfigSerializer(configs, many=True)
+        return Response(serializer.data)
+
+    @extend_schema(
+        tags=["Admin - Config"],
+        request=CreateBrandingConfigRequestSerializer,
+        responses={201: BrandingConfigSerializer},
+        summary="Create a branding config",
+    )
+    def post(self, request):
+        req_serializer = CreateBrandingConfigRequestSerializer(data=request.data)
+        req_serializer.is_valid(raise_exception=True)
+        data = req_serializer.validated_data
+
+        config = BrandingConfig.objects.create(
+            org_id=data.get("org_id"),
+            severity_colors=data.get("severity_colors", {}),
+            header_text=data.get("header_text", ""),
+            fallback_color=data.get("fallback_color", ""),
+        )
+        return Response(BrandingConfigSerializer(config).data, status=status.HTTP_201_CREATED)
+
+
+class BrandingConfigDetailView(APIView):
+    authentication_classes = [ApiKeyAuthentication]
+
+    def _get_config(self, config_id):
+        try:
+            return BrandingConfig.objects.get(id=config_id)
+        except BrandingConfig.DoesNotExist:
+            return None
+
+    @extend_schema(
+        tags=["Admin - Config"],
+        responses={200: BrandingConfigSerializer},
+        summary="Get a branding config",
+    )
+    def get(self, request, config_id):
+        config = self._get_config(config_id)
+        if not config:
+            return Response(
+                {"error": {"code": "not_found", "message": "Branding config not found"}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(BrandingConfigSerializer(config).data)
+
+    @extend_schema(
+        tags=["Admin - Config"],
+        request=UpdateBrandingConfigRequestSerializer,
+        responses={200: BrandingConfigSerializer},
+        summary="Update a branding config",
+    )
+    def patch(self, request, config_id):
+        config = self._get_config(config_id)
+        if not config:
+            return Response(
+                {"error": {"code": "not_found", "message": "Branding config not found"}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        req_serializer = UpdateBrandingConfigRequestSerializer(data=request.data)
+        req_serializer.is_valid(raise_exception=True)
+        data = req_serializer.validated_data
+
+        if "severity_colors" in data:
+            config.severity_colors = data["severity_colors"]
+        if "header_text" in data:
+            config.header_text = data["header_text"]
+        if "fallback_color" in data:
+            config.fallback_color = data["fallback_color"]
+
+        config.save()
+        return Response(BrandingConfigSerializer(config).data)
+
+    @extend_schema(
+        tags=["Admin - Config"],
+        responses={204: None},
+        summary="Delete a branding config",
+    )
+    def delete(self, request, config_id):
+        config = self._get_config(config_id)
+        if not config:
+            return Response(
+                {"error": {"code": "not_found", "message": "Branding config not found"}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        config.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

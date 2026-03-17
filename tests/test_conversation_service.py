@@ -174,7 +174,7 @@ class TestConversationServiceCreate:
         assert message.source == MessageSource.CUSTOMER_API
         assert message.delivered_at is not None
 
-    def test_create_conversation_posts_to_roam(self):
+    def test_create_conversation_posts_blocks_to_roam(self):
         self.service.create_conversation(
             org_id="42",
             org_name="Acme Corp",
@@ -189,12 +189,16 @@ class TestConversationServiceCreate:
             idempotency_key=str(uuid.uuid4()),
         )
 
-        calls = self.mock_client.get_calls("post_message")
+        # Root message now uses post_blocks (Block Kit), not post_message
+        assert len(self.mock_client.get_calls("post_message")) == 0
+        calls = self.mock_client.get_calls("post_blocks")
         assert len(calls) == 1
-        assert calls[0].args[0] == "G-test-group"
-        assert "Jane Smith" in calls[0].args[1]
-        assert "Acme Corp" in calls[0].args[1]
-        assert "Help me please" in calls[0].args[1]
+        assert calls[0].args[0] == "G-test-group"  # chat_id
+        blocks = calls[0].args[1]
+        assert isinstance(blocks, list)
+        assert len(blocks) <= 10
+        # Verify color is set
+        assert calls[0].kwargs.get("color") is not None
 
     def test_create_conversation_records_event_log(self):
         idem_key = str(uuid.uuid4())
@@ -288,6 +292,7 @@ class TestConversationServiceCreate:
 
         assert conversation.id is not None
         assert message.delivered_at is None
+        assert len(self.mock_client.get_calls("post_blocks")) == 0
         assert len(self.mock_client.get_calls("post_message")) == 0
 
 

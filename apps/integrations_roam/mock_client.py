@@ -51,6 +51,18 @@ class MockRoamClient:
             raw={"chat": chat_id, "threadTimestamp": self._post_counter * 1000},
         )
 
+    async def post_blocks(
+        self, chat_id: str, blocks: list[dict], *, color: str | None = None, thread_key: str | None = None
+    ) -> RoamPostResponse:
+        self._record("post_blocks", chat_id, blocks, color=color, thread_key=thread_key)
+        self._post_counter += 1
+        return RoamPostResponse(
+            chat=chat_id,
+            thread_timestamp=self._post_counter * 1000,
+            timestamp=self._post_counter * 1000,
+            raw={"chat": chat_id, "threadTimestamp": self._post_counter * 1000},
+        )
+
     async def get_chat_history(
         self, chat_id: str, *, thread_timestamp: int | None = None, limit: int = 50
     ) -> list[RoamMessage]:

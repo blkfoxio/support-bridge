@@ -71,3 +71,43 @@ class AuditEventSerializer(serializers.Serializer):
     payload = serializers.JSONField()
     processed_at = serializers.DateTimeField(allow_null=True)
     created_at = serializers.DateTimeField()
+
+
+# ---------------------------------------------------------------------------
+# Branding config
+# ---------------------------------------------------------------------------
+
+
+class BrandingConfigSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    org_id = serializers.CharField(allow_null=True, required=False, default=None)
+    severity_colors = serializers.JSONField(required=False, default=dict)
+    header_text = serializers.CharField(required=False, default="", allow_blank=True)
+    fallback_color = serializers.CharField(required=False, default="", allow_blank=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+
+class CreateBrandingConfigRequestSerializer(serializers.Serializer):
+    org_id = serializers.CharField(
+        allow_null=True, required=False, default=None,
+        help_text="Customer org ID. Null for deployment-wide default.",
+    )
+    severity_colors = serializers.JSONField(
+        required=False, default=dict,
+        help_text='Partial map of severity→color, e.g. {"critical": "danger"}',
+    )
+    header_text = serializers.CharField(
+        required=False, default="", allow_blank=True,
+        help_text="Header block text. Empty = use deployment default.",
+    )
+    fallback_color = serializers.CharField(
+        required=False, default="", allow_blank=True,
+        help_text="Color for unknown severity levels.",
+    )
+
+
+class UpdateBrandingConfigRequestSerializer(serializers.Serializer):
+    severity_colors = serializers.JSONField(required=False)
+    header_text = serializers.CharField(required=False, allow_blank=True)
+    fallback_color = serializers.CharField(required=False, allow_blank=True)

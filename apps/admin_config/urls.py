@@ -10,5 +10,7 @@ urlpatterns = [
     path("queue-group-mappings/", views.QueueGroupMappingListView.as_view(), name="queue-group-mapping-list"),
     path("queue-group-mappings/<int:mapping_id>/", views.QueueGroupMappingDetailView.as_view(), name="queue-group-mapping-detail"),
     path("analysts/", views.AnalystListView.as_view(), name="analyst-list"),
+    path("branding/", views.BrandingConfigListView.as_view(), name="branding-list"),
+    path("branding/<int:config_id>/", views.BrandingConfigDetailView.as_view(), name="branding-detail"),
     path("audit/events/", views.AuditEventListView.as_view(), name="audit-event-list"),
 ]

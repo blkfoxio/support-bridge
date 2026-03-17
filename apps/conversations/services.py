@@ -9,7 +9,8 @@ from django.utils import timezone
 
 from apps.audit.models import EventLog
 from apps.customer_api.serializers import MessageSerializer
-from apps.integrations_roam.formatters import format_customer_message, format_root_message
+from apps.integrations_roam.blocks import build_root_message_blocks
+from apps.integrations_roam.formatters import format_customer_message
 from apps.messaging.models import ActorType, Message, MessageDirection, MessageSource, MessageType
 from apps.queues.models import QueueGroupMapping
 from apps.routing.services import RoutingService
@@ -115,7 +116,7 @@ class ConversationService:
         # 5. Post to Roam (outside transaction — Roam failure shouldn't roll back DB)
         if roam_group_id:
             try:
-                roam_text = format_root_message(
+                blocks, color = build_root_message_blocks(
                     customer_name=customer_name,
                     customer_email=customer_email,
                     org_name=org_name,
@@ -127,8 +128,8 @@ class ConversationService:
                     conversation_id=str(conversation.id),
                     message_body=message_body,
                 )
-                roam_response = async_to_sync(self.roam_client.post_message)(
-                    roam_group_id, roam_text, thread_key=str(conversation.id)
+                roam_response = async_to_sync(self.roam_client.post_blocks)(
+                    roam_group_id, blocks, color=color, thread_key=str(conversation.id)
                 )
                 # Store external metadata
                 message.external_message_id = str(roam_response.timestamp or "")
