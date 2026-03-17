@@ -3,6 +3,19 @@
 from drf_spectacular.extensions import OpenApiAuthenticationExtension
 
 
+class CognitoJWTAuthExtension(OpenApiAuthenticationExtension):
+    target_class = "common.auth.backends.CognitoJWTAuthentication"
+    name = "CognitoJWT"
+
+    def get_security_definition(self, auto_schema):
+        return {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "Cognito Access Token",
+            "description": "Cognito JWT access token from Cyflare ONE authentication",
+        }
+
+
 class FirebaseJWTAuthExtension(OpenApiAuthenticationExtension):
     target_class = "common.auth.backends.FirebaseJWTAuthentication"
     name = "FirebaseJWT"
@@ -12,7 +25,7 @@ class FirebaseJWTAuthExtension(OpenApiAuthenticationExtension):
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "Firebase ID Token",
-            "description": "Firebase JWT token obtained via Firebase Auth SDK",
+            "description": "Firebase JWT token obtained via Firebase Auth SDK (legacy)",
         }
 
 

@@ -3,18 +3,17 @@
 import logging
 
 from django.conf import settings
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
-from drf_spectacular.utils import extend_schema
 
 from apps.conversations.models import Conversation, ConversationStatus
 from apps.conversations.services import ConversationService
 from apps.integrations_roam.client import RoamClient
 from apps.integrations_roam.mock_client import MockRoamClient
 from apps.messaging.models import Message
-from common.auth.backends import FirebaseJWTAuthentication
+from common.auth.backends import CognitoJWTAuthentication, FirebaseJWTAuthentication
 
 from .serializers import (
     ConversationDetailSerializer,
@@ -40,7 +39,7 @@ def _get_roam_client():
 class ConversationRootView(APIView):
     """Handles GET (list) and POST (create) on /conversations/."""
 
-    authentication_classes = [FirebaseJWTAuthentication]
+    authentication_classes = [CognitoJWTAuthentication, FirebaseJWTAuthentication]
 
     @extend_schema(
         tags=["Customer - Conversations"],
@@ -110,7 +109,7 @@ class ConversationRootView(APIView):
 
 
 class ConversationDetailView(APIView):
-    authentication_classes = [FirebaseJWTAuthentication]
+    authentication_classes = [CognitoJWTAuthentication, FirebaseJWTAuthentication]
 
     @extend_schema(
         tags=["Customer - Conversations"],
@@ -136,7 +135,7 @@ class ConversationDetailView(APIView):
 
 
 class ConversationMessagesView(APIView):
-    authentication_classes = [FirebaseJWTAuthentication]
+    authentication_classes = [CognitoJWTAuthentication, FirebaseJWTAuthentication]
 
     @extend_schema(
         tags=["Customer - Conversations"],
@@ -208,7 +207,7 @@ class ConversationMessagesView(APIView):
 
 
 class ConversationTypingView(APIView):
-    authentication_classes = [FirebaseJWTAuthentication]
+    authentication_classes = [CognitoJWTAuthentication, FirebaseJWTAuthentication]
 
     @extend_schema(
         tags=["Customer - Conversations"],
@@ -224,7 +223,7 @@ class ConversationTypingView(APIView):
 
 
 class ConversationCloseView(APIView):
-    authentication_classes = [FirebaseJWTAuthentication]
+    authentication_classes = [CognitoJWTAuthentication, FirebaseJWTAuthentication]
 
     @extend_schema(
         tags=["Customer - Conversations"],
@@ -261,7 +260,7 @@ class ConversationCloseView(APIView):
 
 
 class ConversationReopenView(APIView):
-    authentication_classes = [FirebaseJWTAuthentication]
+    authentication_classes = [CognitoJWTAuthentication, FirebaseJWTAuthentication]
 
     @extend_schema(
         tags=["Customer - Conversations"],
@@ -297,7 +296,7 @@ class ConversationReopenView(APIView):
 
 
 class ConversationFeedbackView(APIView):
-    authentication_classes = [FirebaseJWTAuthentication]
+    authentication_classes = [CognitoJWTAuthentication, FirebaseJWTAuthentication]
 
     @extend_schema(
         tags=["Customer - Conversations"],
