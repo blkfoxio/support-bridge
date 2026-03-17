@@ -22,7 +22,24 @@ logger = logging.getLogger(__name__)
 
 
 class ConversationService:
-    """Handles conversation creation and message sending."""
+    """Handles conversation creation, messaging, and lifecycle transitions."""
+
+    # Valid status transitions for lifecycle operations
+    _RESOLVABLE_STATUSES = {
+        ConversationStatus.ASSIGNED,
+        ConversationStatus.WAITING_CUSTOMER,
+        ConversationStatus.WAITING_SOC,
+    }
+    _CLOSEABLE_STATUSES = {
+        ConversationStatus.RESOLVED,
+        ConversationStatus.ASSIGNED,
+        ConversationStatus.WAITING_CUSTOMER,
+        ConversationStatus.WAITING_SOC,
+    }
+    _REOPENABLE_STATUSES = {
+        ConversationStatus.RESOLVED,
+        ConversationStatus.CLOSED,
+    }
 
     def __init__(self, roam_client):
         self.roam_client = roam_client
@@ -199,7 +216,8 @@ class ConversationService:
         # 4. Update conversation
         conversation.last_message_at = now
         update_fields = ["last_message_at"]
-        if conversation.status == ConversationStatus.WAITING_CUSTOMER:
+        if conversation.status in (ConversationStatus.WAITING_CUSTOMER, ConversationStatus.RESOLVED):
+            # Auto-reopen resolved conversations when customer sends a message
             conversation.status = ConversationStatus.WAITING_SOC
             update_fields.append("status")
         conversation.save(update_fields=update_fields)
@@ -244,3 +262,186 @@ class ConversationService:
             logger.debug("Failed to publish SSE event for message %s", message.id, exc_info=True)
 
         return message
+
+    # ------------------------------------------------------------------
+    # Lifecycle transitions
+    # ------------------------------------------------------------------
+
+    def _create_system_message(self, conversation: Conversation, body: str) -> Message:
+        """Create an internal system message (not posted to Roam)."""
+        return Message.objects.create(
+            conversation=conversation,
+            actor_type=ActorType.SYSTEM,
+            actor_id="system",
+            direction=MessageDirection.OUTBOUND,
+            source=MessageSource.INTERNAL,
+            body_plain=body,
+            message_type=MessageType.SYSTEM_NOTE,
+        )
+
+    def _publish_status_changed(self, conversation: Conversation, system_message: Message) -> None:
+        """Publish SSE events for a status transition + the system message."""
+        publisher = SSEPublisher()
+        conv_id = str(conversation.id)
+
+        # Publish the system message so the customer sees it in the thread
+        publisher.publish(
+            conversation_id=conv_id,
+            event_type="message.created",
+            data=MessageSerializer(system_message).data,
+        )
+
+        # Publish the status change so the client can update UI state
+        publisher.publish(
+            conversation_id=conv_id,
+            event_type="conversation.status_changed",
+            data={"conversation_id": conv_id, "status": conversation.status},
+        )
+
+    def resolve_conversation(
+        self,
+        *,
+        conversation_id: str,
+        actor_id: str,
+        resolution_note: str = "",
+    ) -> Conversation:
+        """Mark a conversation as resolved (soft close).
+
+        Typically triggered by an analyst. The customer can confirm (close) or reopen.
+        """
+        conversation = Conversation.objects.get(id=conversation_id)
+
+        if conversation.status not in self._RESOLVABLE_STATUSES:
+            raise ValueError(
+                f"Cannot resolve conversation in '{conversation.status}' status. "
+                f"Must be one of: {', '.join(s.value for s in self._RESOLVABLE_STATUSES)}"
+            )
+
+        now = timezone.now()
+        conversation.status = ConversationStatus.RESOLVED
+        conversation.resolved_at = now
+        conversation.save(update_fields=["status", "resolved_at"])
+
+        body = "Your analyst has resolved this conversation. If you still need help, you can reopen it."
+        if resolution_note:
+            body = f"{body}\n\nNote: {resolution_note}"
+        system_msg = self._create_system_message(conversation, body)
+
+        EventLog.objects.create(
+            event_type="conversation.resolved",
+            idempotency_key=f"resolve-{conversation_id}-{now.isoformat()}",
+            source="ops_api",
+            conversation=conversation,
+            payload={"actor_id": actor_id, "resolution_note": resolution_note},
+        )
+
+        try:
+            self._publish_status_changed(conversation, system_msg)
+        except Exception:
+            logger.debug("Failed to publish SSE for resolve on %s", conversation_id, exc_info=True)
+
+        logger.info("Conversation %s resolved by %s", conversation_id, actor_id)
+        return conversation
+
+    def close_conversation(
+        self,
+        *,
+        conversation_id: str,
+        user_id: str,
+        close_reason: str = "",
+    ) -> Conversation:
+        """Close a conversation (hard close).
+
+        Typically triggered by the customer confirming resolution, or proactively ending.
+        """
+        conversation = Conversation.objects.get(id=conversation_id)
+        if conversation.customer_user_id != user_id:
+            raise PermissionError("User does not own this conversation")
+
+        if conversation.status not in self._CLOSEABLE_STATUSES:
+            raise ValueError(
+                f"Cannot close conversation in '{conversation.status}' status. "
+                f"Must be one of: {', '.join(s.value for s in self._CLOSEABLE_STATUSES)}"
+            )
+
+        now = timezone.now()
+        conversation.status = ConversationStatus.CLOSED
+        conversation.closed_at = now
+        conversation.save(update_fields=["status", "closed_at"])
+
+        system_msg = self._create_system_message(conversation, "This conversation has been closed.")
+
+        EventLog.objects.create(
+            event_type="conversation.closed",
+            idempotency_key=f"close-{conversation_id}-{now.isoformat()}",
+            source="customer_api",
+            conversation=conversation,
+            payload={"user_id": user_id, "close_reason": close_reason},
+        )
+
+        try:
+            publisher = SSEPublisher()
+            conv_id = str(conversation.id)
+            # Publish system message
+            publisher.publish(
+                conversation_id=conv_id,
+                event_type="message.created",
+                data=MessageSerializer(system_msg).data,
+            )
+            # Publish conversation.closed — clients should disconnect SSE on this event
+            publisher.publish(
+                conversation_id=conv_id,
+                event_type="conversation.closed",
+                data={"conversation_id": conv_id, "status": "closed"},
+            )
+        except Exception:
+            logger.debug("Failed to publish SSE for close on %s", conversation_id, exc_info=True)
+
+        logger.info("Conversation %s closed by customer %s", conversation_id, user_id)
+        return conversation
+
+    def reopen_conversation(
+        self,
+        *,
+        conversation_id: str,
+        user_id: str,
+    ) -> Conversation:
+        """Reopen a resolved or closed conversation.
+
+        Transitions back to waiting_soc so the SOC team knows the customer needs more help.
+        """
+        conversation = Conversation.objects.get(id=conversation_id)
+        if conversation.customer_user_id != user_id:
+            raise PermissionError("User does not own this conversation")
+
+        if conversation.status not in self._REOPENABLE_STATUSES:
+            raise ValueError(
+                f"Cannot reopen conversation in '{conversation.status}' status. "
+                f"Must be one of: {', '.join(s.value for s in self._REOPENABLE_STATUSES)}"
+            )
+
+        now = timezone.now()
+        conversation.status = ConversationStatus.WAITING_SOC
+        conversation.last_message_at = now
+        # Clear closed_at if reopening from closed
+        if conversation.closed_at:
+            conversation.closed_at = None
+        conversation.save(update_fields=["status", "last_message_at", "closed_at"])
+
+        system_msg = self._create_system_message(conversation, "You reopened this conversation.")
+
+        EventLog.objects.create(
+            event_type="conversation.reopened",
+            idempotency_key=f"reopen-{conversation_id}-{now.isoformat()}",
+            source="customer_api",
+            conversation=conversation,
+            payload={"user_id": user_id},
+        )
+
+        try:
+            self._publish_status_changed(conversation, system_msg)
+        except Exception:
+            logger.debug("Failed to publish SSE for reopen on %s", conversation_id, exc_info=True)
+
+        logger.info("Conversation %s reopened by customer %s", conversation_id, user_id)
+        return conversation

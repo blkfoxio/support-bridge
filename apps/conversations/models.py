@@ -118,3 +118,28 @@ class ConversationTag(models.Model):
 
     def __str__(self):
         return f"{self.tag.key} on {self.conversation_id}"
+
+
+class Feedback(models.Model):
+    """Customer satisfaction rating submitted after conversation closure."""
+
+    class Rating(models.IntegerChoices):
+        BAD = 1, "Bad"
+        OK = 2, "OK"
+        GREAT = 3, "Great"
+
+    id = models.BigAutoField(primary_key=True)
+    conversation = models.OneToOneField(
+        Conversation, on_delete=models.CASCADE, related_name="feedback"
+    )
+    customer_user_id = models.CharField(max_length=255)
+    rating = models.SmallIntegerField(choices=Rating.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["customer_user_id"], name="idx_feedback_customer"),
+        ]
+
+    def __str__(self):
+        return f"Feedback {self.rating} on {self.conversation_id}"

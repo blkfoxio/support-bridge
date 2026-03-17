@@ -20,6 +20,8 @@ from .serializers import (
     ConversationDetailSerializer,
     ConversationWithMessageSerializer,
     CreateConversationRequestSerializer,
+    FeedbackRequestSerializer,
+    FeedbackResponseSerializer,
     MessageSerializer,
     SendMessageRequestSerializer,
     TypingRequestSerializer,
@@ -52,6 +54,16 @@ class ConversationRootView(APIView):
             .select_related("queue")
             .order_by("-opened_at")
         )
+
+        # Optional status filter: ?status=queued,assigned,resolved (comma-separated)
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            statuses = [s.strip() for s in status_filter.split(",") if s.strip()]
+            valid_statuses = {c.value for c in ConversationStatus}
+            statuses = [s for s in statuses if s in valid_statuses]
+            if statuses:
+                conversations = conversations.filter(status__in=statuses)
+
         return Response(ConversationDetailSerializer(conversations, many=True).data)
 
     @extend_schema(
@@ -220,10 +232,32 @@ class ConversationCloseView(APIView):
         summary="Close a conversation",
     )
     def post(self, request, conversation_id):
-        return Response(
-            {"error": {"code": "not_implemented", "message": "Not yet implemented", "status": 501}},
-            status=status.HTTP_501_NOT_IMPLEMENTED,
-        )
+        roam_client = _get_roam_client()
+        service = ConversationService(roam_client)
+
+        try:
+            conversation = service.close_conversation(
+                conversation_id=str(conversation_id),
+                user_id=request.user.uid,
+                close_reason=request.data.get("close_reason", ""),
+            )
+        except Conversation.DoesNotExist:
+            return Response(
+                {"error": {"code": "not_found", "message": "Conversation not found", "status": 404}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except PermissionError:
+            return Response(
+                {"error": {"code": "forbidden", "message": "You do not own this conversation", "status": 403}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except ValueError as e:
+            return Response(
+                {"error": {"code": "bad_request", "message": str(e), "status": 400}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(ConversationDetailSerializer(conversation).data)
 
 
 class ConversationReopenView(APIView):
@@ -232,10 +266,81 @@ class ConversationReopenView(APIView):
     @extend_schema(
         tags=["Customer - Conversations"],
         responses={200: ConversationDetailSerializer},
-        summary="Reopen a closed conversation",
+        summary="Reopen a closed or resolved conversation",
     )
     def post(self, request, conversation_id):
-        return Response(
-            {"error": {"code": "not_implemented", "message": "Not yet implemented", "status": 501}},
-            status=status.HTTP_501_NOT_IMPLEMENTED,
+        roam_client = _get_roam_client()
+        service = ConversationService(roam_client)
+
+        try:
+            conversation = service.reopen_conversation(
+                conversation_id=str(conversation_id),
+                user_id=request.user.uid,
+            )
+        except Conversation.DoesNotExist:
+            return Response(
+                {"error": {"code": "not_found", "message": "Conversation not found", "status": 404}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except PermissionError:
+            return Response(
+                {"error": {"code": "forbidden", "message": "You do not own this conversation", "status": 403}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except ValueError as e:
+            return Response(
+                {"error": {"code": "bad_request", "message": str(e), "status": 400}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(ConversationDetailSerializer(conversation).data)
+
+
+class ConversationFeedbackView(APIView):
+    authentication_classes = [FirebaseJWTAuthentication]
+
+    @extend_schema(
+        tags=["Customer - Conversations"],
+        request=FeedbackRequestSerializer,
+        responses={201: FeedbackResponseSerializer},
+        summary="Submit CSAT feedback for a conversation",
+    )
+    def post(self, request, conversation_id):
+        from apps.conversations.models import Feedback
+
+        serializer = FeedbackRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            conversation = Conversation.objects.get(id=conversation_id)
+        except Conversation.DoesNotExist:
+            return Response(
+                {"error": {"code": "not_found", "message": "Conversation not found", "status": 404}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if conversation.customer_user_id != request.user.uid:
+            return Response(
+                {"error": {"code": "forbidden", "message": "You do not own this conversation", "status": 403}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if conversation.status not in (ConversationStatus.CLOSED, ConversationStatus.RESOLVED):
+            return Response(
+                {"error": {"code": "bad_request", "message": "Feedback can only be submitted for closed or resolved conversations", "status": 400}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if Feedback.objects.filter(conversation=conversation).exists():
+            return Response(
+                {"error": {"code": "conflict", "message": "Feedback already submitted for this conversation", "status": 409}},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        feedback = Feedback.objects.create(
+            conversation=conversation,
+            customer_user_id=request.user.uid,
+            rating=serializer.validated_data["rating"],
         )
+
+        return Response(FeedbackResponseSerializer(feedback).data, status=status.HTTP_201_CREATED)

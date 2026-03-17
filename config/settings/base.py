@@ -164,6 +164,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "roam.poll_replies",
         "schedule": 10.0,  # Every 10 seconds
     },
+    "check-idle-conversations": {
+        "task": "conversations.check_idle",
+        "schedule": 60.0,  # Every 60 seconds
+    },
 }
 
 # Firebase
@@ -180,6 +184,9 @@ OPS_API_KEY = config("OPS_API_KEY", default="change-me-in-production")
 
 # App version
 APP_VERSION = config("APP_VERSION", default="0.1.0")
+
+# Public URL for action pages (Roam button links)
+SITE_URL = config("SITE_URL", default="https://support-bridge-production.up.railway.app")
 
 # Logging
 LOGGING = {

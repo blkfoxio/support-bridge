@@ -12,5 +12,6 @@ urlpatterns = [
     path("conversations/<uuid:conversation_id>/typing/", views.ConversationTypingView.as_view(), name="conversation-typing"),
     path("conversations/<uuid:conversation_id>/close/", views.ConversationCloseView.as_view(), name="conversation-close"),
     path("conversations/<uuid:conversation_id>/reopen/", views.ConversationReopenView.as_view(), name="conversation-reopen"),
+    path("conversations/<uuid:conversation_id>/feedback/", views.ConversationFeedbackView.as_view(), name="conversation-feedback"),
     path("stream/", customer_sse_stream, name="customer-stream"),
 ]

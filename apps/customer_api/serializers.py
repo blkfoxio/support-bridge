@@ -78,3 +78,21 @@ class ConversationWithMessageSerializer(serializers.Serializer):
 
     conversation = ConversationDetailSerializer()
     message = MessageSerializer()
+
+
+class FeedbackRequestSerializer(serializers.Serializer):
+    """Request body for submitting CSAT feedback."""
+
+    rating = serializers.IntegerField(
+        min_value=1, max_value=3,
+        help_text="1 = Bad, 2 = OK, 3 = Great",
+    )
+
+
+class FeedbackResponseSerializer(serializers.Serializer):
+    """Response for feedback submission."""
+
+    id = serializers.IntegerField()
+    conversation_id = serializers.UUIDField()
+    rating = serializers.IntegerField()
+    created_at = serializers.DateTimeField()

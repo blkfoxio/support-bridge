@@ -11,6 +11,8 @@ Constraints:
 
 from __future__ import annotations
 
+from apps.actions.helpers import resolve_action_url
+
 from .theme import get_theme, severity_color
 
 # Max length for message body before truncation (keeps payload under 8KB).
@@ -85,7 +87,7 @@ def build_root_message_blocks(
 
     Returns:
         (blocks, color) tuple ready for ``RoamClient.post_blocks()``.
-        ``blocks`` is a list of 7 block dicts (within the 10-block limit).
+        ``blocks`` is a list of 8 block dicts (within the 10-block limit).
         ``color`` is a Roam color value for the left strip.
     """
     theme = get_theme(org_id)
@@ -94,6 +96,8 @@ def build_root_message_blocks(
     body = message_body
     if len(body) > _MAX_BODY_LENGTH:
         body = body[:_MAX_BODY_LENGTH] + "\n\n_(message truncated)_"
+
+    resolve_url = resolve_action_url(conversation_id)
 
     blocks = [
         header(theme["header_text"]),
@@ -110,6 +114,7 @@ def build_root_message_blocks(
         ]),
         divider(),
         section(body),
+        actions([url_button("Resolve", resolve_url, style="primary")]),
     ]
 
     color = severity_color(severity, org_id)

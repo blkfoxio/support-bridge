@@ -30,6 +30,9 @@ urlpatterns = [
     path("api/v1/ops/analytics/", include("apps.analytics.urls", namespace="analytics")),
     path("api/v1/admin/", include("apps.admin_config.urls", namespace="admin-config")),
 
+    # Actions (browser-based, triggered from Roam buttons)
+    path("actions/", include("apps.actions.urls", namespace="actions")),
+
     # Webhooks
     path("webhooks/roam/", include("apps.integrations_roam.urls", namespace="roam-webhooks")),
 

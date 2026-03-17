@@ -15,7 +15,11 @@ from apps.analytics.services import AnalyticsService, parse_period
 
 logger = logging.getLogger(__name__)
 from apps.conversations.models import Conversation
+from apps.conversations.services import ConversationService
+from apps.integrations_roam.client import RoamClient
+from apps.integrations_roam.mock_client import MockRoamClient
 from apps.queues.models import Queue
+from django.conf import settings
 
 from .serializers import (
     AssignRequestSerializer,
@@ -37,6 +41,12 @@ NOT_IMPLEMENTED = Response(
     {"error": {"code": "not_implemented", "message": "Not yet implemented", "status": 501}},
     status=status.HTTP_501_NOT_IMPLEMENTED,
 )
+
+
+def _get_roam_client():
+    if settings.ROAM_API_TOKEN:
+        return RoamClient(settings.ROAM_API_BASE_URL, settings.ROAM_API_TOKEN)
+    return MockRoamClient()
 
 
 class QueueListView(APIView):
@@ -161,7 +171,30 @@ class ConversationResolveView(APIView):
         summary="Resolve a conversation",
     )
     def post(self, request, conversation_id):
-        return NOT_IMPLEMENTED
+        serializer = ResolveRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        roam_client = _get_roam_client()
+        service = ConversationService(roam_client)
+
+        try:
+            conversation = service.resolve_conversation(
+                conversation_id=str(conversation_id),
+                actor_id=request.data.get("actor_id", "ops_api"),
+                resolution_note=serializer.validated_data.get("resolution_note", ""),
+            )
+        except Conversation.DoesNotExist:
+            return Response(
+                {"error": {"code": "not_found", "message": "Conversation not found", "status": 404}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except ValueError as e:
+            return Response(
+                {"error": {"code": "bad_request", "message": str(e), "status": 400}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(OpsConversationDetailSerializer(conversation).data)
 
 
 class ConversationCloseView(APIView):
