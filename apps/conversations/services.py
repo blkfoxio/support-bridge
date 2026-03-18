@@ -11,6 +11,7 @@ from apps.audit.models import EventLog
 from apps.customer_api.serializers import MessageSerializer
 from apps.integrations_roam.blocks import build_root_message_blocks
 from apps.integrations_roam.formatters import format_customer_message
+from apps.integrations_roam.notifications import post_status_to_roam
 from apps.messaging.models import ActorType, Message, MessageDirection, MessageSource, MessageType
 from apps.queues.models import QueueGroupMapping
 from apps.routing.services import RoutingService
@@ -340,6 +341,11 @@ class ConversationService:
         except Exception:
             logger.debug("Failed to publish SSE for resolve on %s", conversation_id, exc_info=True)
 
+        roam_note = "Conversation resolved by analyst."
+        if resolution_note:
+            roam_note = f"Conversation resolved by analyst. Note: {resolution_note}"
+        post_status_to_roam(conversation, roam_note)
+
         logger.info("Conversation %s resolved by %s", conversation_id, actor_id)
         return conversation
 
@@ -397,6 +403,8 @@ class ConversationService:
         except Exception:
             logger.debug("Failed to publish SSE for close on %s", conversation_id, exc_info=True)
 
+        post_status_to_roam(conversation, "Conversation closed by customer.")
+
         logger.info("Conversation %s closed by customer %s", conversation_id, user_id)
         return conversation
 
@@ -442,6 +450,8 @@ class ConversationService:
             self._publish_status_changed(conversation, system_msg)
         except Exception:
             logger.debug("Failed to publish SSE for reopen on %s", conversation_id, exc_info=True)
+
+        post_status_to_roam(conversation, "Conversation reopened by customer.")
 
         logger.info("Conversation %s reopened by customer %s", conversation_id, user_id)
         return conversation

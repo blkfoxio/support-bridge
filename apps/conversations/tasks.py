@@ -7,6 +7,7 @@ from celery import shared_task
 from django.utils import timezone
 
 from apps.customer_api.serializers import MessageSerializer
+from apps.integrations_roam.notifications import post_status_to_roam
 from apps.messaging.models import ActorType, Message, MessageDirection, MessageSource, MessageType
 from common.sse import SSEPublisher
 
@@ -150,7 +151,7 @@ def _check_customer_idle(now):
     conversations = Conversation.objects.filter(
         status=ConversationStatus.WAITING_CUSTOMER,
         last_message_at__isnull=False,
-    )
+    ).select_related("queue")
 
     for conv in conversations:
         idle_since = now - conv.last_message_at
@@ -177,6 +178,7 @@ def _check_customer_idle(now):
                 "You can reopen anytime if you still need help.",
             )
             _publish_status_changed(conv, msg)
+            post_status_to_roam(conv, "Conversation auto-resolved (customer idle 24h).")
             count += 1
             logger.info("Auto-resolved conversation %s (customer idle %dh)", conv.id, int(idle_hours))
 
@@ -211,7 +213,7 @@ def _check_resolved_idle(now):
         status=ConversationStatus.RESOLVED,
         resolved_at__isnull=False,
         resolved_at__lte=cutoff,
-    )
+    ).select_related("queue")
 
     for conv in conversations:
         conv.status = ConversationStatus.CLOSED
@@ -235,6 +237,8 @@ def _check_resolved_idle(now):
             )
         except Exception:
             logger.debug("Failed to publish SSE for auto-close on %s", conv.id, exc_info=True)
+
+        post_status_to_roam(conv, "Conversation auto-closed (resolved 72h ago).")
 
         count += 1
         logger.info("Auto-closed conversation %s (resolved %s ago)", conv.id, now - conv.resolved_at)
