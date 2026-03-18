@@ -10,6 +10,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 
+import requests as http_requests
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -93,6 +94,31 @@ def _derive_idempotency_key(fields: WebhookFields, raw_payload: dict) -> str:
     payload_hash = hashlib.sha256(json.dumps(raw_payload, sort_keys=True).encode()).hexdigest()[:16]
     ts_bucket = (fields.timestamp or 0) // 1000
     return f"roam:chat_message:{payload_hash}:{ts_bucket}"
+
+
+def _send_push_notification(
+    conversation_id: str,
+    customer_cognito_sub: str,
+    sender_name: str,
+    message_preview: str,
+) -> None:
+    """Send a push notification to the customer's mobile device via Cloud Function."""
+    push_url = getattr(settings, "PUSH_NOTIFICATION_URL", "")
+    if not push_url:
+        logger.debug("PUSH_NOTIFICATION_URL not configured, skipping push notification")
+        return
+
+    http_requests.post(
+        push_url,
+        json={
+            "conversationId": conversation_id,
+            "customerCognitoSub": customer_cognito_sub,
+            "senderName": sender_name,
+            "messagePreview": message_preview[:200],
+        },
+        timeout=5,
+    )
+    logger.info("Push notification sent for conversation %s", conversation_id)
 
 
 def _is_bot_echo(sender_id: str) -> bool:
@@ -247,6 +273,17 @@ class WebhookService:
             )
         except Exception:
             logger.exception("Failed to publish SSE event for message %s", message.id)
+
+        # 9. Send push notification to customer's mobile device
+        try:
+            _send_push_notification(
+                conversation_id=str(conversation.id),
+                customer_cognito_sub=conversation.customer_user_id,
+                sender_name=sender_name or "Cyflare Support",
+                message_preview=(fields.text or "")[:200],
+            )
+        except Exception:
+            logger.exception("Failed to send push notification for message %s", message.id)
 
         logger.info(
             "Processed analyst reply: conversation=%s message=%s sender=%s",
