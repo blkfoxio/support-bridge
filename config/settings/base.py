@@ -187,6 +187,9 @@ ROAM_BOT_USER_ID = config("ROAM_BOT_USER_ID", default="")
 # Ops/Admin API Key
 OPS_API_KEY = config("OPS_API_KEY", default="change-me-in-production")
 
+# Push notification Cloud Function URL (for mobile support chat notifications)
+PUSH_NOTIFICATION_URL = config("PUSH_NOTIFICATION_URL", default="")
+
 # App version
 APP_VERSION = config("APP_VERSION", default="0.1.0")
 
