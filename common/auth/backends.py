@@ -179,9 +179,17 @@ class CognitoJWTAuthentication(authentication.BaseAuthentication):
             region = getattr(settings, "COGNITO_REGION", "us-east-1")
             user_pool_id = getattr(settings, "COGNITO_USER_POOL_ID", "")
             expected_issuer = f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}"
-            if unverified.get("iss") != expected_issuer:
+            token_issuer = unverified.get("iss")
+            if token_issuer != expected_issuer:
+                logger.warning(
+                    "Cognito issuer mismatch: token_iss=%r expected=%r "
+                    "(region=%r, pool_id=%r)",
+                    token_issuer, expected_issuer, region, user_pool_id,
+                )
                 return None  # Not a Cognito token — let next auth class handle it
-        except Exception:
+            logger.info("Cognito issuer matched: %s", expected_issuer)
+        except Exception as e:
+            logger.warning("Failed to decode token for issuer check: %s", e)
             return None  # Can't decode — not our token
 
         try:
