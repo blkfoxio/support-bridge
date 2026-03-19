@@ -6,6 +6,7 @@ feed them through the existing WebhookService pipeline.
 """
 
 import logging
+import time
 
 from asgiref.sync import async_to_sync
 from celery import shared_task
@@ -14,6 +15,11 @@ from django.conf import settings
 from apps.conversations.models import Conversation, ConversationStatus
 
 logger = logging.getLogger(__name__)
+
+# Cache user names to avoid hitting Roam's rate limit on every poll cycle.
+_user_names_cache: dict[str, str] = {}
+_user_names_fetched_at: float = 0.0
+_USER_NAMES_TTL = 300  # 5 minutes
 
 # Statuses where we expect analyst replies
 _ACTIVE_STATUSES = [
@@ -38,14 +44,21 @@ def _make_client():
 
 
 def _fetch_user_names():
-    """Fetch Roam user ID → display name mapping."""
+    """Fetch Roam user ID → display name mapping, cached for 5 minutes."""
+    global _user_names_cache, _user_names_fetched_at
+
+    if _user_names_cache and (time.monotonic() - _user_names_fetched_at) < _USER_NAMES_TTL:
+        return _user_names_cache
+
     try:
         client = _make_client()
         users = async_to_sync(client.list_users)()
-        return {u.id: u.name for u in users if u.name}
+        _user_names_cache = {u.id: u.name for u in users if u.name}
+        _user_names_fetched_at = time.monotonic()
+        return _user_names_cache
     except Exception:
         logger.warning("Could not fetch Roam user list for name resolution", exc_info=True)
-        return {}
+        return _user_names_cache or {}
 
 
 @shared_task(name="roam.poll_replies", bind=True, max_retries=0)
