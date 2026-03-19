@@ -17,6 +17,7 @@ class CreateConversationRequestSerializer(serializers.Serializer):
     source_channel = serializers.ChoiceField(
         choices=["mobile_ios", "mobile_android", "web"], default="mobile_ios"
     )
+    subject = serializers.CharField(required=False, default="", help_text="Short subject line for the conversation")
     message = serializers.CharField(help_text="Initial message body")
 
 
@@ -59,6 +60,7 @@ class ConversationDetailSerializer(serializers.Serializer):
     customer_org_name = serializers.CharField()
     customer_name = serializers.CharField()
     customer_email = serializers.CharField()
+    subject = serializers.CharField()
     status = serializers.CharField()
     severity = serializers.CharField()
     issue_category = serializers.CharField()

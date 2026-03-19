@@ -97,6 +97,7 @@ class ConversationRootView(APIView):
             issue_category=data.get("issue_category", "general"),
             severity=data.get("severity", "medium"),
             source_channel=data.get("source_channel", "mobile_ios"),
+            subject=data.get("subject", ""),
             message_body=data["message"],
             idempotency_key=idempotency_key,
         )

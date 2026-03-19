@@ -58,6 +58,7 @@ class ConversationService:
         issue_category: str,
         severity: str,
         source_channel: str,
+        subject: str = "",
         message_body: str,
         idempotency_key: str,
     ) -> tuple[Conversation, Message]:
@@ -86,6 +87,9 @@ class ConversationService:
         # 4. Create conversation and message atomically
         now = timezone.now()
         with transaction.atomic():
+            # Derive subject from the first line of the message if not provided.
+            derived_subject = subject or message_body.split("\n", 1)[0].strip()[:200]
+
             conversation = Conversation.objects.create(
                 customer_org_id=org_id,
                 customer_org_name=org_name,
@@ -97,6 +101,7 @@ class ConversationService:
                 severity=severity,
                 issue_category=issue_category,
                 tier=tier,
+                subject=derived_subject,
                 queue=target_queue,
                 roam_thread_key=str(uuid.uuid4()),  # Will be set to conversation.id after save
                 opened_at=now,

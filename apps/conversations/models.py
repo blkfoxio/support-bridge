@@ -31,6 +31,9 @@ class Conversation(models.Model):
     customer_name = models.CharField(max_length=255, default="", blank=True)
     customer_email = models.CharField(max_length=255, default="", blank=True)
 
+    # Subject — short description derived from the initial message
+    subject = models.CharField(max_length=200, default="", blank=True)
+
     # Classification
     source_channel = models.CharField(max_length=20, choices=SourceChannel.choices, default=SourceChannel.MOBILE_IOS)
     status = models.CharField(max_length=20, choices=ConversationStatus.choices, default=ConversationStatus.NEW)
