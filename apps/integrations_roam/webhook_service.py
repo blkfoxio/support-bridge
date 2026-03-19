@@ -214,6 +214,9 @@ class WebhookService:
                     fields.sender_id,
                 )
 
+        if not sender_name:
+            sender_name = "Cyflare Support"
+
         # 7. Create message and update conversation atomically
         now = timezone.now()
         with transaction.atomic():

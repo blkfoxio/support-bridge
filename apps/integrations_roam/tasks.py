@@ -44,7 +44,7 @@ def _fetch_user_names():
         users = async_to_sync(client.list_users)()
         return {u.id: u.name for u in users if u.name}
     except Exception:
-        logger.debug("Could not fetch Roam user list for name resolution", exc_info=True)
+        logger.warning("Could not fetch Roam user list for name resolution", exc_info=True)
         return {}
 
 

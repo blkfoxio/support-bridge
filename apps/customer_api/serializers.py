@@ -1,6 +1,10 @@
 """Serializers for the customer-facing API."""
 
+import re
+
 from rest_framework import serializers
+
+_UUID_RE = re.compile(r'^[A-Za-z]?-?[0-9a-f]{8}-[0-9a-f]{4}-', re.IGNORECASE)
 
 
 class CreateConversationRequestSerializer(serializers.Serializer):
@@ -49,7 +53,12 @@ class MessageSerializer(serializers.Serializer):
     def get_sender_name(self, obj):
         """Derive a display name from metadata or actor_id."""
         metadata = getattr(obj, "metadata", {}) or {}
-        return metadata.get("roam_sender_name") or metadata.get("customer_name") or obj.actor_id
+        name = metadata.get("roam_sender_name") or metadata.get("customer_name") or ""
+        if name and not _UUID_RE.match(name):
+            return name
+        if obj.actor_type == "analyst":
+            return "Cyflare Support"
+        return name or obj.actor_id
 
 
 class ConversationDetailSerializer(serializers.Serializer):
