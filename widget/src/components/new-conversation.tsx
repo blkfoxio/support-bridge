@@ -3,7 +3,7 @@
  */
 
 import { useRef, useState } from 'preact/hooks';
-import { conversations, isLoading, navigateToDetail, navigateToList, widgetConfig } from '../state/store';
+import { conversations, navigateToDetail, navigateToList, widgetConfig } from '../state/store';
 import { getClient } from '../services';
 import type { IssueCategory, Severity } from '../api/types';
 
@@ -144,7 +144,7 @@ export function NewConversation({ caseId, caseSubject }: NewConversationProps) {
         >
           Cancel
         </button>
-        <button type="submit" class="sb-btn sb-btn--primary" disabled={submitting}>
+        <button type="submit" class="sb-btn sb-btn--primary sb-btn--form-submit" disabled={submitting}>
           {submitting ? 'Creating...' : 'Start Conversation'}
         </button>
       </div>

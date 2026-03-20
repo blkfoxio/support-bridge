@@ -43,7 +43,8 @@ export function updateToken(token: string): void {
  * Detect the base URL from the script tag that loaded the widget.
  */
 function detectBaseUrl(): string {
-  const scripts = document.querySelectorAll('script[src*="widget"]');
+  // Look specifically for the support-bridge widget script
+  const scripts = document.querySelectorAll('script[src*="support-bridge"], script[src*="widget/v1/widget.js"]');
   for (const script of scripts) {
     const src = script.getAttribute('src');
     if (src) {
