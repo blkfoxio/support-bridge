@@ -113,6 +113,20 @@ async def _event_stream(conversation_id: str):
         await subscriber.close()
 
 
+def _add_cors_headers(response):
+    """Add CORS headers for cross-origin widget access.
+
+    The widget is designed to be embedded on any customer domain (like Zoho/
+    Intercom), so Allow-Origin must be '*'.  Every response from this view
+    is gated by JWT authentication and conversation-ownership checks, so
+    the permissive origin policy does not weaken security.
+    """
+    response["Access-Control-Allow-Origin"] = "*"
+    response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    response["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
+    return response
+
+
 @csrf_exempt
 async def customer_sse_stream(request):
     """SSE endpoint for real-time conversation updates.
@@ -122,15 +136,24 @@ async def customer_sse_stream(request):
     Accepts Cognito or Firebase Bearer token authentication. The customer
     can only subscribe to conversations they own.
     """
+    # Handle CORS preflight
+    if request.method == "OPTIONS":
+        response = JsonResponse({}, status=200)
+        return _add_cors_headers(response)
+
     if request.method != "GET":
         return JsonResponse({"error": "Method not allowed"}, status=405)
 
     # 1. Extract and verify auth token
+    # Accept token from Authorization header or ?token= query param.
+    # Native EventSource does not support custom headers, so the widget
+    # passes the token as a query param.
+    token = ""
     auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return JsonResponse({"error": "Missing or invalid Authorization header"}, status=401)
-
-    token = auth_header[7:]  # Strip "Bearer "
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    else:
+        token = request.GET.get("token", "")
     decoded = await _verify_token(token)
     if decoded is None:
         return JsonResponse({"error": "Invalid or expired token"}, status=401)
@@ -169,4 +192,5 @@ async def customer_sse_stream(request):
     )
     response["Cache-Control"] = "no-cache"
     response["X-Accel-Buffering"] = "no"
+    _add_cors_headers(response)
     return response

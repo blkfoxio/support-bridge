@@ -55,8 +55,22 @@ function destroy(): void {
   removeStyles();
 }
 
+function extractUserIdFromToken(token: string): string {
+  try {
+    const payload = token.split('.')[1];
+    const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    return decoded.sub || '';
+  } catch {
+    return '';
+  }
+}
+
 const SupportBridge: SupportBridgeAPI = {
   init(config: WidgetConfig) {
+    // Extract userId from JWT sub claim if not explicitly provided
+    if (!config.userId && config.token) {
+      config.userId = extractUserIdFromToken(config.token);
+    }
     widgetConfig.value = config;
     initServices(config);
     mount();

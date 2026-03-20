@@ -16,6 +16,7 @@ export class SupportBridgeSse {
   private maxReconnectDelay = 30000;
   private handler: SseEventHandler | null = null;
   private conversationId: string | null = null;
+  private disposed = false;
 
   constructor(baseUrl: string, getToken: () => string) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
@@ -24,6 +25,7 @@ export class SupportBridgeSse {
 
   connect(conversationId: string, handler: SseEventHandler): void {
     this.disconnect();
+    this.disposed = false;
     this.conversationId = conversationId;
     this.handler = handler;
     this.reconnectDelay = 2000;
@@ -31,6 +33,7 @@ export class SupportBridgeSse {
   }
 
   disconnect(): void {
+    this.disposed = true;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -79,7 +82,9 @@ export class SupportBridgeSse {
     es.onerror = () => {
       es.close();
       this.eventSource = null;
-      this.scheduleReconnect();
+      if (!this.disposed) {
+        this.scheduleReconnect();
+      }
     };
   }
 

@@ -8,6 +8,14 @@ DEBUG = True
 INSTALLED_APPS += ["corsheaders"]  # noqa: F405
 MIDDLEWARE.insert(1, "corsheaders.middleware.CorsMiddleware")  # noqa: F405
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "authorization",
+    "content-type",
+    "idempotency-key",
+    "origin",
+    "x-requested-with",
+]
 
 # Use simple console logging in development
 LOGGING["handlers"]["console"]["formatter"] = "simple"  # noqa: F405
