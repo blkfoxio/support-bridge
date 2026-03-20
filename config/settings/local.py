@@ -4,6 +4,11 @@ from .base import *  # noqa: F401, F403
 
 DEBUG = True
 
+# CORS — allow local Angular dev server
+INSTALLED_APPS += ["corsheaders"]  # noqa: F405
+MIDDLEWARE.insert(1, "corsheaders.middleware.CorsMiddleware")  # noqa: F405
+CORS_ALLOW_ALL_ORIGINS = True
+
 # Use simple console logging in development
 LOGGING["handlers"]["console"]["formatter"] = "simple"  # noqa: F405
 

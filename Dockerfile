@@ -1,3 +1,13 @@
+## Stage 1: Build the embeddable chat widget
+FROM node:20-alpine AS widget-builder
+
+WORKDIR /widget
+COPY widget/package.json widget/package-lock.json* ./
+RUN npm ci
+COPY widget/ .
+RUN npm run build
+
+## Stage 2: Python application
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -14,6 +24,9 @@ COPY pyproject.toml .
 RUN pip install --no-cache-dir ".[dev]"
 
 COPY . .
+
+# Copy built widget bundle from stage 1
+COPY --from=widget-builder /widget/dist/ /app/widget/dist/
 
 RUN python manage.py collectstatic --noinput || true
 

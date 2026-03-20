@@ -6,6 +6,8 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from django.conf import settings
 
+from apps.customer_api.widget_views import widget_js
+
 
 def health_check(request):
     return JsonResponse({"status": "ok"})
@@ -35,6 +37,9 @@ urlpatterns = [
 
     # Webhooks
     path("webhooks/roam/", include("apps.integrations_roam.urls", namespace="roam-webhooks")),
+
+    # Widget
+    path("widget/v1/widget.js", widget_js, name="widget-js"),
 
     # Django admin
     path("django-admin/", admin.site.urls),

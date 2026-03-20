@@ -188,6 +188,10 @@ cython_debug/
 #  you could uncomment the following to ignore the entire vscode folder
 # .vscode/
 
+# Widget (Node.js)
+widget/node_modules/
+widget/dist/
+
 # Ruff stuff:
 .ruff_cache/
 
