@@ -14,6 +14,8 @@ CORS_ALLOW_HEADERS = [
     "content-type",
     "idempotency-key",
     "origin",
+    "user-agent",
+    "x-csrftoken",
     "x-requested-with",
 ]
 
