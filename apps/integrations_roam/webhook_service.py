@@ -1,7 +1,7 @@
 """Webhook ingestion service for Roam chat events.
 
 Processes inbound webhook payloads from Roam, creating Message rows for
-analyst replies and publishing SSE events for real-time customer delivery.
+analyst replies and handing them to the customer delivery dispatcher.
 """
 
 import hashlib
@@ -10,14 +10,13 @@ import logging
 import uuid
 from dataclasses import dataclass
 
-import requests as http_requests
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
 from apps.audit.models import EventLog
 from apps.conversations.models import Conversation, ConversationStatus
-from apps.customer_api.serializers import MessageSerializer
+from apps.messaging.delivery import CustomerDeliveryDispatcher
 from apps.messaging.models import ActorType, Message, MessageDirection, MessageSource, MessageType
 from apps.queues.models import AnalystProfile
 from common.sse import SSEPublisher
@@ -96,31 +95,6 @@ def _derive_idempotency_key(fields: WebhookFields, raw_payload: dict) -> str:
     return f"roam:chat_message:{payload_hash}:{ts_bucket}"
 
 
-def _send_push_notification(
-    conversation_id: str,
-    customer_cognito_sub: str,
-    sender_name: str,
-    message_preview: str,
-) -> None:
-    """Send a push notification to the customer's mobile device via Cloud Function."""
-    push_url = getattr(settings, "PUSH_NOTIFICATION_URL", "")
-    if not push_url:
-        logger.debug("PUSH_NOTIFICATION_URL not configured, skipping push notification")
-        return
-
-    http_requests.post(
-        push_url,
-        json={
-            "conversationId": conversation_id,
-            "customerCognitoSub": customer_cognito_sub,
-            "senderName": sender_name,
-            "messagePreview": message_preview[:200],
-        },
-        timeout=5,
-    )
-    logger.info("Push notification sent for conversation %s", conversation_id)
-
-
 def _is_bot_echo(sender_id: str) -> bool:
     """Check if a message is from a bot (our own echo or another bot)."""
     if not sender_id:
@@ -143,6 +117,7 @@ class WebhookService:
 
     def __init__(self):
         self._publisher = SSEPublisher()
+        self._dispatcher = CustomerDeliveryDispatcher(publisher=self._publisher)
 
     def handle_chat_message(self, raw_payload: dict) -> Message | None:
         """Process a chat-message webhook from Roam.
@@ -266,27 +241,8 @@ class WebhookService:
                 processed_at=now,
             )
 
-        # 8. Publish SSE events (outside transaction)
-        try:
-            message_data = MessageSerializer(message).data
-            self._publisher.publish(
-                conversation_id=str(conversation.id),
-                event_type="message.created",
-                data=message_data,
-            )
-        except Exception:
-            logger.exception("Failed to publish SSE event for message %s", message.id)
-
-        # 9. Send push notification to customer's mobile device
-        try:
-            _send_push_notification(
-                conversation_id=str(conversation.id),
-                customer_cognito_sub=conversation.customer_user_id,
-                sender_name=sender_name or "Cyflare Support",
-                message_preview=(fields.text or "")[:200],
-            )
-        except Exception:
-            logger.exception("Failed to send push notification for message %s", message.id)
+        # 8. Deliver to the customer: SSE, mobile push, and any external channel (outside transaction)
+        self._dispatcher.deliver_message(conversation, message, sender_name)
 
         logger.info(
             "Processed analyst reply: conversation=%s message=%s sender=%s",

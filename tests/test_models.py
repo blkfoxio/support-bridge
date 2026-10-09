@@ -14,7 +14,7 @@ class TestEnumChoices:
         assert set(ConversationStatus.values) == expected
 
     def test_source_channel_values(self):
-        expected = {"mobile_ios", "mobile_android", "web"}
+        expected = {"mobile_ios", "mobile_android", "web", "slack"}
         assert set(SourceChannel.values) == expected
 
     def test_actor_type_values(self):
@@ -26,7 +26,7 @@ class TestEnumChoices:
         assert set(MessageDirection.values) == expected
 
     def test_message_source_values(self):
-        expected = {"customer_api", "roam_webhook", "internal"}
+        expected = {"customer_api", "roam_webhook", "internal", "slack"}
         assert set(MessageSource.values) == expected
 
     def test_message_type_values(self):

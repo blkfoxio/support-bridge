@@ -27,7 +27,8 @@ class FirebaseUser:
 
     @property
     def org_id(self) -> str | None:
-        return self.claims.get("org_id")
+        org_id = self.claims.get("org_id") or self.claims.get("custom:org_id")
+        return str(org_id) if org_id else None
 
     def __str__(self) -> str:
         return f"FirebaseUser({self.uid})"
@@ -44,7 +45,8 @@ class CognitoUser:
 
     @property
     def org_id(self) -> str | None:
-        return self.claims.get("org_id")
+        org_id = self.claims.get("org_id") or self.claims.get("custom:org_id")
+        return str(org_id) if org_id else None
 
     def __str__(self) -> str:
         return f"CognitoUser({self.uid})"

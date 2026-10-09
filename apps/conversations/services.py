@@ -13,6 +13,7 @@ from apps.integrations_roam.blocks import build_root_message_blocks
 from apps.integrations_roam.formatters import format_customer_message
 from apps.integrations_roam.notifications import post_status_to_roam
 from apps.messaging.models import ActorType, Message, MessageDirection, MessageSource, MessageType
+from apps.organizations.services import ensure_organization
 from apps.queues.models import QueueGroupMapping
 from apps.routing.services import RoutingService
 from common.sse import SSEPublisher
@@ -87,6 +88,8 @@ class ConversationService:
         # 4. Create conversation and message atomically
         now = timezone.now()
         with transaction.atomic():
+            ensure_organization(org_id, org_name)
+
             # Derive subject from the first line of the message if not provided.
             derived_subject = subject or message_body.split("\n", 1)[0].strip()[:200]
 

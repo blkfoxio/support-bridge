@@ -18,6 +18,7 @@ class MessageSource(models.TextChoices):
     CUSTOMER_API = "customer_api", "Customer API"
     ROAM_WEBHOOK = "roam_webhook", "Roam Webhook"
     INTERNAL = "internal", "Internal System"
+    SLACK = "slack", "Slack"
 
 
 class MessageType(models.TextChoices):

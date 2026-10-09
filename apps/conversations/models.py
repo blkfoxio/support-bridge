@@ -17,6 +17,7 @@ class SourceChannel(models.TextChoices):
     MOBILE_IOS = "mobile_ios", "iOS Mobile App"
     MOBILE_ANDROID = "mobile_android", "Android Mobile App"
     WEB = "web", "Web"
+    SLACK = "slack", "Slack"
 
 
 class Conversation(models.Model):

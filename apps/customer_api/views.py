@@ -84,13 +84,40 @@ class ConversationRootView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # The owner always comes from the verified token, never the request body.
+        user_id = request.user.uid
+        body_user_id = data.get("user_id")
+        if body_user_id and body_user_id != user_id:
+            logger.warning("Ignoring body user_id=%r that differs from token uid=%r", body_user_id, user_id)
+
+        # Prefer the token's org claim; the body value is only trusted when the token has none.
+        token_org_id = getattr(request.user, "org_id", None)
+        body_org_id = data.get("org_id")
+        if token_org_id and body_org_id and body_org_id != token_org_id:
+            return Response(
+                {
+                    "error": {
+                        "code": "org_mismatch",
+                        "message": "org_id does not match the authenticated user's organization",
+                        "status": 403,
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        org_id = token_org_id or body_org_id
+        if not org_id:
+            return Response(
+                {"error": {"code": "missing_org_id", "message": "org_id is required", "status": 400}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         roam_client = _get_roam_client()
         service = ConversationService(roam_client)
 
         conversation, message = service.create_conversation(
-            org_id=data["org_id"],
+            org_id=org_id,
             org_name=data["org_name"],
-            user_id=data["user_id"],
+            user_id=user_id,
             customer_name=data["customer_name"],
             customer_email=data["customer_email"],
             tier=data.get("tier", "standard"),

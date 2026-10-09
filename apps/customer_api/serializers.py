@@ -10,9 +10,15 @@ _UUID_RE = re.compile(r'^[A-Za-z]?-?[0-9a-f]{8}-[0-9a-f]{4}-', re.IGNORECASE)
 class CreateConversationRequestSerializer(serializers.Serializer):
     """Request body for creating a new support conversation."""
 
-    org_id = serializers.CharField(help_text="Customer organization ID")
+    org_id = serializers.CharField(
+        required=False,
+        help_text="Customer organization ID. Must match the token's org claim when the token carries one.",
+    )
     org_name = serializers.CharField(help_text="Customer organization name")
-    user_id = serializers.CharField(help_text="Customer user ID")
+    user_id = serializers.CharField(
+        required=False,
+        help_text="Deprecated and ignored: the conversation owner is always the authenticated user.",
+    )
     customer_name = serializers.CharField(help_text="Customer display name")
     customer_email = serializers.EmailField(help_text="Customer email address")
     tier = serializers.CharField(required=False, default="standard", help_text="Customer tier (e.g. enterprise)")
