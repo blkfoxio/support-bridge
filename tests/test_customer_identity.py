@@ -206,7 +206,13 @@ class TestFetchAccessibleOrgIds:
 
 class TestUserCanAccessOrgCaching:
     def test_result_is_cached(self, one_enabled):
-        with patch.object(one_org, "fetch_accessible_org_ids", return_value={"5"}) as fetch:
+        with patch.object(one_org, "_iter_accessible_org_id_pages", return_value=iter([{"5"}])) as fetch:
             assert one_org.user_can_access_org(token="t", uid="u", org_id="5") is True
             assert one_org.user_can_access_org(token="t", uid="u", org_id="5") is True
         assert fetch.call_count == 1
+
+    def test_stops_paging_once_org_is_found(self, one_enabled):
+        first_page = _one_response(payload={"count": 200, "next": "more", "results": [{"id": 5, "disabled": False}]})
+        with patch.object(httpx.Client, "get", side_effect=[first_page]) as get:
+            assert one_org.user_can_access_org(token="t", uid="u2", org_id="5") is True
+        assert get.call_count == 1
