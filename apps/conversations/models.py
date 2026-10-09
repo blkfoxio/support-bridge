@@ -77,6 +77,34 @@ class Conversation(models.Model):
         return f"Conversation {self.id} ({self.status})"
 
 
+class ParticipantRole(models.TextChoices):
+    OWNER = "owner", "Owner"
+    PARTICIPANT = "participant", "Participant"
+
+
+class ConversationParticipant(models.Model):
+    """A customer who can see a conversation besides (or as) its owner, e.g. everyone posting in a Slack thread."""
+
+    id = models.BigAutoField(primary_key=True)
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="participants")
+    user_id = models.CharField(
+        max_length=255, db_index=True, help_text="ONE user ID, or a synthetic ID such as slack:T…:U… until linked"
+    )
+    identity = models.ForeignKey(
+        "identities.ExternalIdentity", on_delete=models.SET_NULL, null=True, blank=True, related_name="participations"
+    )
+    role = models.CharField(max_length=20, choices=ParticipantRole.choices, default=ParticipantRole.PARTICIPANT)
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["conversation", "user_id"], name="unique_conversation_participant"),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} ({self.role}) in {self.conversation_id}"
+
+
 class Assignment(models.Model):
     """Tracks analyst assignment history for a conversation."""
 

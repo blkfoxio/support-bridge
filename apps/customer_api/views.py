@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.conversations.access import accessible_conversations, can_access
 from apps.conversations.models import Conversation, ConversationStatus
 from apps.conversations.services import ConversationService
 from apps.integrations_roam.client import RoamClient
@@ -50,7 +51,7 @@ class ConversationRootView(APIView):
     )
     def get(self, request):
         conversations = (
-            Conversation.objects.filter(customer_user_id=request.user.uid)
+            accessible_conversations(request.user.uid)
             .select_related("queue")
             .order_by("-opened_at")
         )
@@ -137,7 +138,7 @@ class ConversationDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if conversation.customer_user_id != request.user.uid:
+        if not can_access(conversation, request.user.uid):
             return Response(
                 {"error": {"code": "forbidden", "message": "You do not own this conversation", "status": 403}},
                 status=status.HTTP_403_FORBIDDEN,
@@ -163,7 +164,7 @@ class ConversationMessagesView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if conversation.customer_user_id != request.user.uid:
+        if not can_access(conversation, request.user.uid):
             return Response(
                 {"error": {"code": "forbidden", "message": "You do not own this conversation", "status": 403}},
                 status=status.HTTP_403_FORBIDDEN,
@@ -330,7 +331,7 @@ class ConversationFeedbackView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if conversation.customer_user_id != request.user.uid:
+        if not can_access(conversation, request.user.uid):
             return Response(
                 {"error": {"code": "forbidden", "message": "You do not own this conversation", "status": 403}},
                 status=status.HTTP_403_FORBIDDEN,

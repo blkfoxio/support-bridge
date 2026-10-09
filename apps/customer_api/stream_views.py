@@ -12,6 +12,7 @@ from asgiref.sync import sync_to_async
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
+from apps.conversations.access import can_access
 from apps.conversations.models import Conversation
 from common.sse import SSEEvent, SSESubscriber
 
@@ -173,7 +174,7 @@ async def customer_sse_stream(request):
     except Conversation.DoesNotExist:
         return JsonResponse({"error": "Conversation not found"}, status=404)
 
-    if conversation.customer_user_id != user_uid:
+    if not await sync_to_async(can_access)(conversation, user_uid):
         return JsonResponse({"error": "Not authorized to access this conversation"}, status=403)
 
     # 3. Check Last-Event-ID (acknowledged but not replayed for prototype)

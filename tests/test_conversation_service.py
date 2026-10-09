@@ -363,7 +363,7 @@ class TestConversationServiceSendMessage:
             queue=self.queue,
         )
 
-        with pytest.raises(PermissionError, match="does not own"):
+        with pytest.raises(PermissionError, match="does not have access"):
             self.service.send_message(
                 conversation_id=str(conversation.id),
                 user_id="wrong-user",

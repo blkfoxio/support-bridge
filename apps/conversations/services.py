@@ -18,7 +18,8 @@ from apps.queues.models import QueueGroupMapping
 from apps.routing.services import RoutingService
 from common.sse import SSEPublisher
 
-from .models import Conversation, ConversationStatus, SourceChannel
+from .access import can_access
+from .models import Conversation, ConversationParticipant, ConversationStatus, ParticipantRole, SourceChannel
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,9 @@ class ConversationService:
             # Set roam_thread_key to conversation ID
             conversation.roam_thread_key = str(conversation.id)
             conversation.save(update_fields=["roam_thread_key"])
+            ConversationParticipant.objects.create(
+                conversation=conversation, user_id=user_id, role=ParticipantRole.OWNER
+            )
 
             message = Message.objects.create(
                 conversation=conversation,
@@ -195,8 +199,8 @@ class ConversationService:
         """
         # 1. Get and validate conversation
         conversation = Conversation.objects.select_related("queue").get(id=conversation_id)
-        if conversation.customer_user_id != user_id:
-            raise PermissionError("User does not own this conversation")
+        if not can_access(conversation, user_id):
+            raise PermissionError("User does not have access to this conversation")
 
         if conversation.status == ConversationStatus.CLOSED:
             raise ValueError("Cannot send messages to a closed conversation")
@@ -369,8 +373,8 @@ class ConversationService:
         Typically triggered by the customer confirming resolution, or proactively ending.
         """
         conversation = Conversation.objects.get(id=conversation_id)
-        if conversation.customer_user_id != user_id:
-            raise PermissionError("User does not own this conversation")
+        if not can_access(conversation, user_id):
+            raise PermissionError("User does not have access to this conversation")
 
         if conversation.status not in self._CLOSEABLE_STATUSES:
             raise ValueError(
@@ -427,8 +431,8 @@ class ConversationService:
         Transitions back to waiting_soc so the SOC team knows the customer needs more help.
         """
         conversation = Conversation.objects.get(id=conversation_id)
-        if conversation.customer_user_id != user_id:
-            raise PermissionError("User does not own this conversation")
+        if not can_access(conversation, user_id):
+            raise PermissionError("User does not have access to this conversation")
 
         if conversation.status not in self._REOPENABLE_STATUSES:
             raise ValueError(
