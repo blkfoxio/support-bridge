@@ -185,6 +185,11 @@ ROAM_API_TOKEN = config("ROAM_API_TOKEN", default="")
 ROAM_WEBHOOK_SECRET = config("ROAM_WEBHOOK_SECRET", default="")
 ROAM_BOT_USER_ID = config("ROAM_BOT_USER_ID", default="")
 
+# Cyflare ONE API (verifies customer org membership; disabled when the base URL is blank)
+CYFLARE_ONE_API_BASE_URL = config("CYFLARE_ONE_API_BASE_URL", default="")
+CYFLARE_ONE_TIMEOUT_SECONDS = config("CYFLARE_ONE_TIMEOUT_SECONDS", default=3.0, cast=float)
+CYFLARE_ONE_ORG_CACHE_SECONDS = config("CYFLARE_ONE_ORG_CACHE_SECONDS", default=600, cast=int)
+
 # Ops/Admin API Key
 OPS_API_KEY = config("OPS_API_KEY", default="change-me-in-production")
 

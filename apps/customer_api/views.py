@@ -14,6 +14,7 @@ from apps.integrations_roam.client import RoamClient
 from apps.integrations_roam.mock_client import MockRoamClient
 from apps.messaging.models import Message
 from common.auth.backends import CognitoJWTAuthentication, FirebaseJWTAuthentication
+from common.auth.one_org import OrgVerificationUnavailableError, org_verification_enabled, user_can_access_org
 
 from .serializers import (
     ConversationDetailSerializer,
@@ -110,6 +111,34 @@ class ConversationRootView(APIView):
                 {"error": {"code": "missing_org_id", "message": "org_id is required", "status": 400}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Confirm membership with Cyflare ONE. Fails closed if ONE can't answer.
+        if org_verification_enabled():
+            try:
+                allowed = user_can_access_org(token=request.auth, uid=user_id, org_id=org_id)
+            except OrgVerificationUnavailableError:
+                logger.exception("Cyflare ONE org verification unavailable for uid=%s", user_id)
+                return Response(
+                    {
+                        "error": {
+                            "code": "org_verification_unavailable",
+                            "message": "Unable to verify organization right now, please try again",
+                            "status": 503,
+                        }
+                    },
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            if not allowed:
+                return Response(
+                    {
+                        "error": {
+                            "code": "org_forbidden",
+                            "message": "You do not have access to this organization",
+                            "status": 403,
+                        }
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         roam_client = _get_roam_client()
         service = ConversationService(roam_client)

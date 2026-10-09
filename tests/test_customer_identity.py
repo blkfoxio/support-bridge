@@ -1,13 +1,17 @@
 """Tests that conversation ownership and org come from the verified token, not the request body."""
 
 import uuid
+from unittest.mock import patch
 
+import httpx
 import pytest
+from django.core.cache import cache
 
 from apps.conversations.models import Conversation
 from apps.organizations.models import Organization
 from apps.organizations.services import ensure_organization
 from apps.queues.factories import QueueFactory
+from common.auth import one_org
 from common.auth.backends import CognitoUser, FirebaseUser
 
 URL = "/api/v1/customer/conversations/"
@@ -104,3 +108,105 @@ class TestEnsureOrganization:
         assert ensure_organization("5", "Beta").name == "Beta"
         assert ensure_organization("5", "Other").name == "Beta"
         assert Organization.objects.count() == 1
+
+
+# --- Cyflare ONE org verification ---
+
+ONE_URL = "https://one.test"
+
+
+@pytest.fixture
+def one_enabled(settings):
+    settings.CYFLARE_ONE_API_BASE_URL = ONE_URL
+    cache.clear()
+    yield
+    cache.clear()
+
+
+def _one_response(status_code=200, payload=None):
+    return httpx.Response(status_code, json=payload or {}, request=httpx.Request("GET", ONE_URL))
+
+
+@pytest.mark.django_db
+class TestCreateConversationWithOneVerification:
+    def test_member_org_is_allowed(self, no_org_client, one_enabled):
+        QueueFactory(key="soc-triage")
+        with patch("apps.customer_api.views.user_can_access_org", return_value=True) as check:
+            response = _post(no_org_client, _payload(org_id="77"))
+
+        assert response.status_code == 201
+        assert check.call_args.kwargs["org_id"] == "77"
+        assert check.call_args.kwargs["uid"] == "cognito-no-org"
+
+    def test_non_member_org_is_rejected(self, no_org_client, one_enabled):
+        QueueFactory(key="soc-triage")
+        with patch("apps.customer_api.views.user_can_access_org", return_value=False):
+            response = _post(no_org_client, _payload(org_id="77"))
+
+        assert response.status_code == 403
+        assert response.data["error"]["code"] == "org_forbidden"
+        assert not Conversation.objects.exists()
+
+    def test_one_outage_fails_closed(self, no_org_client, one_enabled):
+        QueueFactory(key="soc-triage")
+        with patch(
+            "apps.customer_api.views.user_can_access_org",
+            side_effect=one_org.OrgVerificationUnavailableError("timeout"),
+        ):
+            response = _post(no_org_client, _payload(org_id="77"))
+
+        assert response.status_code == 503
+        assert not Conversation.objects.exists()
+
+    def test_verification_skipped_when_not_configured(self, no_org_client, settings):
+        settings.CYFLARE_ONE_API_BASE_URL = ""
+        QueueFactory(key="soc-triage")
+        with patch("apps.customer_api.views.user_can_access_org") as check:
+            response = _post(no_org_client, _payload(org_id="77"))
+
+        assert response.status_code == 201
+        check.assert_not_called()
+
+
+class TestFetchAccessibleOrgIds:
+    def test_collects_ids_across_pages_and_children(self, settings):
+        settings.CYFLARE_ONE_API_BASE_URL = ONE_URL
+        pages = [
+            _one_response(payload={
+                "count": 3,
+                "next": "more",
+                "results": [{"id": 1, "disabled": False, "children": [{"id": 11, "disabled": False}]}],
+            }),
+            _one_response(payload={
+                "count": 3,
+                "next": None,
+                "results": [{"id": 2, "disabled": True, "children": '[{"id": 21}]'}],
+            }),
+        ]
+        with patch.object(httpx.Client, "get", side_effect=pages):
+            assert one_org.fetch_accessible_org_ids("tok") == {"1", "11", "21"}
+
+    def test_rejected_token_means_no_orgs(self, settings):
+        settings.CYFLARE_ONE_API_BASE_URL = ONE_URL
+        with patch.object(httpx.Client, "get", return_value=_one_response(401)):
+            assert one_org.fetch_accessible_org_ids("tok") == set()
+
+    def test_server_error_raises_unavailable(self, settings):
+        settings.CYFLARE_ONE_API_BASE_URL = ONE_URL
+        with patch.object(httpx.Client, "get", return_value=_one_response(502)):
+            with pytest.raises(one_org.OrgVerificationUnavailableError):
+                one_org.fetch_accessible_org_ids("tok")
+
+    def test_timeout_raises_unavailable(self, settings):
+        settings.CYFLARE_ONE_API_BASE_URL = ONE_URL
+        with patch.object(httpx.Client, "get", side_effect=httpx.ReadTimeout("slow")):
+            with pytest.raises(one_org.OrgVerificationUnavailableError):
+                one_org.fetch_accessible_org_ids("tok")
+
+
+class TestUserCanAccessOrgCaching:
+    def test_result_is_cached(self, one_enabled):
+        with patch.object(one_org, "fetch_accessible_org_ids", return_value={"5"}) as fetch:
+            assert one_org.user_can_access_org(token="t", uid="u", org_id="5") is True
+            assert one_org.user_can_access_org(token="t", uid="u", org_id="5") is True
+        assert fetch.call_count == 1
