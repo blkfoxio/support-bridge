@@ -28,6 +28,7 @@ urlpatterns = [
 
     # API namespaces
     path("api/v1/customer/", include("apps.customer_api.urls", namespace="customer-api")),
+    path("api/v1/customer/slack/", include("apps.integrations_slack.customer_urls", namespace="customer-slack")),
     path("api/v1/ops/", include("apps.ops_api.urls", namespace="ops-api")),
     path("api/v1/ops/analytics/", include("apps.analytics.urls", namespace="analytics")),
     path("api/v1/admin/", include("apps.admin_config.urls", namespace="admin-config")),
@@ -37,6 +38,9 @@ urlpatterns = [
 
     # Webhooks
     path("webhooks/roam/", include("apps.integrations_roam.urls", namespace="roam-webhooks")),
+
+    # Slack app (OAuth install + Events API)
+    path("slack/", include("apps.integrations_slack.urls", namespace="slack")),
 
     # Widget
     path("widget/v1/widget.js", widget_js, name="widget-js"),

@@ -131,7 +131,7 @@ def _one_response(status_code=200, payload=None):
 class TestCreateConversationWithOneVerification:
     def test_member_org_is_allowed(self, no_org_client, one_enabled):
         QueueFactory(key="soc-triage")
-        with patch("apps.customer_api.views.user_can_access_org", return_value=True) as check:
+        with patch("common.auth.one_org.user_can_access_org", return_value=True) as check:
             response = _post(no_org_client, _payload(org_id="77"))
 
         assert response.status_code == 201
@@ -140,7 +140,7 @@ class TestCreateConversationWithOneVerification:
 
     def test_non_member_org_is_rejected(self, no_org_client, one_enabled):
         QueueFactory(key="soc-triage")
-        with patch("apps.customer_api.views.user_can_access_org", return_value=False):
+        with patch("common.auth.one_org.user_can_access_org", return_value=False):
             response = _post(no_org_client, _payload(org_id="77"))
 
         assert response.status_code == 403
@@ -150,7 +150,7 @@ class TestCreateConversationWithOneVerification:
     def test_one_outage_fails_closed(self, no_org_client, one_enabled):
         QueueFactory(key="soc-triage")
         with patch(
-            "apps.customer_api.views.user_can_access_org",
+            "common.auth.one_org.user_can_access_org",
             side_effect=one_org.OrgVerificationUnavailableError("timeout"),
         ):
             response = _post(no_org_client, _payload(org_id="77"))
@@ -161,7 +161,7 @@ class TestCreateConversationWithOneVerification:
     def test_verification_skipped_when_not_configured(self, no_org_client, settings):
         settings.CYFLARE_ONE_API_BASE_URL = ""
         QueueFactory(key="soc-triage")
-        with patch("apps.customer_api.views.user_can_access_org") as check:
+        with patch("common.auth.one_org.user_can_access_org") as check:
             response = _post(no_org_client, _payload(org_id="77"))
 
         assert response.status_code == 201

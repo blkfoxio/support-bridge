@@ -39,6 +39,7 @@ LOCAL_APPS = [
     "apps.admin_config",
     "apps.audit",
     "apps.organizations",
+    "apps.integrations_slack",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -154,6 +155,14 @@ SPECTACULAR_SETTINGS = {
 # Redis
 REDIS_URL = config("REDIS_URL", default="redis://localhost:6379/0")
 
+# Cache (shared across workers: OAuth state, Cyflare ONE org lookups)
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+    }
+}
+
 # Celery
 CELERY_BROKER_URL = config("CELERY_BROKER_URL", default="redis://localhost:6379/1")
 CELERY_RESULT_BACKEND = REDIS_URL
@@ -189,6 +198,14 @@ ROAM_BOT_USER_ID = config("ROAM_BOT_USER_ID", default="")
 CYFLARE_ONE_API_BASE_URL = config("CYFLARE_ONE_API_BASE_URL", default="")
 CYFLARE_ONE_TIMEOUT_SECONDS = config("CYFLARE_ONE_TIMEOUT_SECONDS", default=3.0, cast=float)
 CYFLARE_ONE_ORG_CACHE_SECONDS = config("CYFLARE_ONE_ORG_CACHE_SECONDS", default=600, cast=int)
+
+# Slack app (one app for all customer workspaces; per-workspace bot tokens are stored encrypted in the DB)
+SLACK_CLIENT_ID = config("SLACK_CLIENT_ID", default="")
+SLACK_CLIENT_SECRET = config("SLACK_CLIENT_SECRET", default="")
+SLACK_SIGNING_SECRET = config("SLACK_SIGNING_SECRET", default="")
+SLACK_TOKEN_ENCRYPTION_KEY = config("SLACK_TOKEN_ENCRYPTION_KEY", default="")
+SLACK_CLAIM_URL = config("SLACK_CLAIM_URL", default="")  # Cyflare ONE page that links a pending workspace
+SLACK_CLAIM_TTL_DAYS = config("SLACK_CLAIM_TTL_DAYS", default=7, cast=int)
 
 # Ops/Admin API Key
 OPS_API_KEY = config("OPS_API_KEY", default="change-me-in-production")

@@ -1,0 +1,46 @@
+# Slack app manifest for the STAGING Cyflare app.
+# Create at https://api.slack.com/apps -> Create New App -> From a manifest.
+display_information:
+  name: Cyflare (Staging)
+  description: Chat with the Cyflare SOC from Slack.
+  background_color: "#0b1f33"
+features:
+  app_home:
+    home_tab_enabled: false
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
+  bot_user:
+    display_name: Cyflare
+    always_online: true
+oauth_config:
+  redirect_urls:
+    - https://support-bridge-staging.up.railway.app/slack/oauth/callback
+  scopes:
+    bot:
+      - chat:write
+      - chat:write.customize
+      - channels:history
+      - groups:history
+      - im:history
+      - channels:read
+      - groups:read
+      - channels:join
+      - reactions:read
+      - users:read
+      - users:read.email
+settings:
+  event_subscriptions:
+    request_url: https://support-bridge-staging.up.railway.app/slack/events
+    bot_events:
+      - app_uninstalled
+      - tokens_revoked
+      - message.channels
+      - message.groups
+      - message.im
+      - member_joined_channel
+      - channel_created
+      - channel_rename
+      - reaction_added
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

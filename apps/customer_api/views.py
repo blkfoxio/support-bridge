@@ -14,8 +14,8 @@ from apps.integrations_roam.client import RoamClient
 from apps.integrations_roam.mock_client import MockRoamClient
 from apps.messaging.models import Message
 from common.auth.backends import CognitoJWTAuthentication, FirebaseJWTAuthentication
-from common.auth.one_org import OrgVerificationUnavailableError, org_verification_enabled, user_can_access_org
 
+from .org_access import authorize_org
 from .serializers import (
     ConversationDetailSerializer,
     ConversationWithMessageSerializer,
@@ -91,54 +91,9 @@ class ConversationRootView(APIView):
         if body_user_id and body_user_id != user_id:
             logger.warning("Ignoring body user_id=%r that differs from token uid=%r", body_user_id, user_id)
 
-        # Prefer the token's org claim; the body value is only trusted when the token has none.
-        token_org_id = getattr(request.user, "org_id", None)
-        body_org_id = data.get("org_id")
-        if token_org_id and body_org_id and body_org_id != token_org_id:
-            return Response(
-                {
-                    "error": {
-                        "code": "org_mismatch",
-                        "message": "org_id does not match the authenticated user's organization",
-                        "status": 403,
-                    }
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        org_id = token_org_id or body_org_id
-        if not org_id:
-            return Response(
-                {"error": {"code": "missing_org_id", "message": "org_id is required", "status": 400}},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Confirm membership with Cyflare ONE. Fails closed if ONE can't answer.
-        if org_verification_enabled():
-            try:
-                allowed = user_can_access_org(token=request.auth, uid=user_id, org_id=org_id)
-            except OrgVerificationUnavailableError:
-                logger.exception("Cyflare ONE org verification unavailable for uid=%s", user_id)
-                return Response(
-                    {
-                        "error": {
-                            "code": "org_verification_unavailable",
-                            "message": "Unable to verify organization right now, please try again",
-                            "status": 503,
-                        }
-                    },
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                )
-            if not allowed:
-                return Response(
-                    {
-                        "error": {
-                            "code": "org_forbidden",
-                            "message": "You do not have access to this organization",
-                            "status": 403,
-                        }
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+        org_id, error = authorize_org(request, data.get("org_id"))
+        if error:
+            return error
 
         roam_client = _get_roam_client()
         service = ConversationService(roam_client)

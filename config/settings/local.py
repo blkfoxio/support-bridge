@@ -36,3 +36,4 @@ if os.environ.get("USE_SQLITE", "").lower() in ("1", "true", "yes") or "pytest" 
             "NAME": ":memory:",
         }
     }
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}  # noqa: F405
