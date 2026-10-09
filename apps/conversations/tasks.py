@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from apps.customer_api.serializers import MessageSerializer
 from apps.integrations_roam.notifications import post_status_to_roam
+from apps.messaging.delivery import notify_external_channels
 from apps.messaging.models import ActorType, Message, MessageDirection, MessageSource, MessageType
 from common.sse import SSEPublisher
 
@@ -178,6 +179,7 @@ def _check_customer_idle(now):
                 "You can reopen anytime if you still need help.",
             )
             _publish_status_changed(conv, msg)
+            notify_external_channels(conv, msg)
             post_status_to_roam(conv, "Conversation auto-resolved (customer idle 24h).")
             count += 1
             logger.info("Auto-resolved conversation %s (customer idle %dh)", conv.id, int(idle_hours))
@@ -199,6 +201,7 @@ def _check_customer_idle(now):
                 "Just checking in — are you still needing help with this?",
             )
             _publish_system_message(conv, msg)
+            notify_external_channels(conv, msg)
             count += 1
             logger.info("Customer idle nudge for conversation %s (idle %dh)", conv.id, int(idle_hours))
 
@@ -238,6 +241,7 @@ def _check_resolved_idle(now):
         except Exception:
             logger.debug("Failed to publish SSE for auto-close on %s", conv.id, exc_info=True)
 
+        notify_external_channels(conv, msg)
         post_status_to_roam(conv, "Conversation auto-closed (resolved 72h ago).")
 
         count += 1

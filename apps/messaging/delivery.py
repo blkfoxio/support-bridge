@@ -29,6 +29,8 @@ class ChannelDeliverer(Protocol):
 
     def deliver_message(self, conversation: Conversation, message: Message, sender_name: str) -> None: ...
 
+    def deliver_system_message(self, conversation: Conversation, message: Message) -> None: ...
+
 
 _channel_deliverers: list[ChannelDeliverer] = []
 
@@ -100,3 +102,13 @@ class CustomerDeliveryDispatcher:
                     deliverer.deliver_message(conversation, message, sender_name)
             except Exception:
                 logger.exception("Failed to deliver message %s via %s", message.id, deliverer.name)
+
+
+def notify_external_channels(conversation: Conversation, system_message: Message) -> None:
+    """Tell external channels (e.g. the Slack thread) about a status change or other system notice."""
+    for deliverer in _channel_deliverers:
+        try:
+            if deliverer.applies_to(conversation):
+                deliverer.deliver_system_message(conversation, system_message)
+        except Exception:
+            logger.exception("Failed to deliver system message %s via %s", system_message.id, deliverer.name)

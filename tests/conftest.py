@@ -1,9 +1,16 @@
 """Root conftest for pytest."""
 
+from unittest.mock import patch
+
 import pytest
+from cryptography.fernet import Fernet
+from django.core.cache import cache
 from rest_framework.test import APIClient
 
+from apps.integrations_slack.services import record_installation
+from apps.queues.factories import QueueFactory
 from common.auth.backends import ApiKeyUser, CognitoUser, FirebaseUser
+from tests.slack_helpers import BOT, TEAM, FakeSlack
 
 
 @pytest.fixture
@@ -51,3 +58,28 @@ def ops_client(api_client):
     """Return an API client authenticated with an API key."""
     api_client.force_authenticate(user=ApiKeyUser())
     return api_client
+
+
+# --- Slack integration fixtures ---
+
+
+@pytest.fixture
+def slack(settings):
+    settings.SLACK_TOKEN_ENCRYPTION_KEY = Fernet.generate_key().decode()
+    settings.ROAM_API_TOKEN = ""
+    cache.clear()
+    fake = FakeSlack()
+    with patch("apps.integrations_slack.inbound.SlackClient", fake), \
+            patch("apps.integrations_slack.outbound.SlackClient", fake), \
+            patch("apps.integrations_slack.services.SlackClient", fake):
+        yield fake
+
+
+@pytest.fixture
+def install(db, slack):
+    QueueFactory(key="soc-triage")
+    inst, _ = record_installation(
+        {"access_token": "xoxb-t", "bot_user_id": BOT, "team": {"id": TEAM, "name": "Acme"}},
+        org_id="42", user_id="admin",
+    )
+    return inst

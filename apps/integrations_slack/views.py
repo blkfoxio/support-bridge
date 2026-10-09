@@ -16,7 +16,7 @@ from apps.organizations.models import Organization
 from . import oauth
 from .client import SlackApiError
 from .services import InstallConflictError, notify_installer, record_installation
-from .tasks import process_slack_event
+from .tasks import process_slack_event, process_slack_interaction
 from .verification import verify_slack_signature
 
 logger = logging.getLogger(__name__)
@@ -119,4 +119,26 @@ def events(request):
             logger.exception("Failed to enqueue Slack event %s", payload.get("event_id"))
             return HttpResponse(status=500)  # Slack will retry
 
+    return HttpResponse(status=200)
+
+
+@csrf_exempt
+@require_POST
+def interactivity(request):
+    """Button clicks. Slack sends a form-encoded ``payload`` field and expects an ack within 3 seconds."""
+    if not verify_slack_signature(
+        body=request.body,
+        timestamp=request.headers.get("X-Slack-Request-Timestamp", ""),
+        signature=request.headers.get("X-Slack-Signature", ""),
+    ):
+        return HttpResponse(status=401)
+    try:
+        payload = json.loads(request.POST.get("payload", ""))
+    except ValueError:
+        return HttpResponse(status=400)
+    try:
+        process_slack_interaction.delay(payload)
+    except Exception:
+        logger.exception("Failed to enqueue Slack interaction")
+        return HttpResponse(status=500)
     return HttpResponse(status=200)

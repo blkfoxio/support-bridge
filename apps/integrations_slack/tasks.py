@@ -8,7 +8,8 @@ from apps.messaging.models import Message
 
 from .client import SlackRateLimitError
 from .inbound import handle_event
-from .outbound import post_to_slack
+from .interactivity import handle_interaction
+from .outbound import post_status_to_slack, post_to_slack
 
 logger = logging.getLogger(__name__)
 
@@ -27,3 +28,19 @@ def deliver_to_slack(self, message_id: str, sender_name: str) -> None:
         post_to_slack(message, sender_name)
     except SlackRateLimitError as exc:
         raise self.retry(exc=exc) from exc
+
+
+@shared_task(name="slack.deliver_status", bind=True, max_retries=3, default_retry_delay=5)
+def deliver_status_to_slack(self, message_id: str, status: str) -> None:
+    message = Message.objects.filter(id=message_id).first()
+    if not message:
+        return
+    try:
+        post_status_to_slack(message, status)
+    except SlackRateLimitError as exc:
+        raise self.retry(exc=exc) from exc
+
+
+@shared_task(name="slack.process_interaction", bind=True, max_retries=0)
+def process_slack_interaction(self, payload: dict) -> None:
+    handle_interaction(payload)

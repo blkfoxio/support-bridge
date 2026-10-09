@@ -41,6 +41,9 @@ settings:
       - channel_created
       - channel_rename
       - reaction_added
+  interactivity:
+    is_enabled: true
+    request_url: https://support-bridge-staging.up.railway.app/slack/interactivity
   org_deploy_enabled: false
   socket_mode_enabled: false
   token_rotation_enabled: false
