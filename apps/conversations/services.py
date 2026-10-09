@@ -12,6 +12,7 @@ from apps.customer_api.serializers import MessageSerializer
 from apps.integrations_roam.blocks import build_root_message_blocks
 from apps.integrations_roam.formatters import format_customer_message
 from apps.integrations_roam.notifications import post_status_to_roam
+from apps.messaging.delivery import CustomerDeliveryDispatcher
 from apps.messaging.models import ActorType, Message, MessageDirection, MessageSource, MessageType
 from apps.organizations.services import ensure_organization
 from apps.queues.models import QueueGroupMapping
@@ -19,7 +20,7 @@ from apps.routing.services import RoutingService
 from common.sse import SSEPublisher
 
 from .access import can_access
-from .models import Conversation, ConversationParticipant, ConversationStatus, ParticipantRole, SourceChannel
+from .models import Conversation, ConversationParticipant, ConversationStatus, ParticipantRole
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,9 @@ class ConversationService:
         subject: str = "",
         message_body: str,
         idempotency_key: str,
+        message_source: str = MessageSource.CUSTOMER_API,
+        message_metadata: dict | None = None,
+        channel_label: str = "",
     ) -> tuple[Conversation, Message]:
         """Create a new conversation with initial message, route to queue, and post to Roam.
 
@@ -123,10 +127,10 @@ class ConversationService:
                 actor_type=ActorType.CUSTOMER,
                 actor_id=user_id,
                 direction=MessageDirection.INBOUND,
-                source=MessageSource.CUSTOMER_API,
+                source=message_source,
                 body_plain=message_body,
                 message_type=MessageType.TEXT,
-                metadata={"customer_name": customer_name},
+                metadata={"customer_name": customer_name, **(message_metadata or {})},
             )
 
             # Record event
@@ -157,6 +161,7 @@ class ConversationService:
                     queue_name=target_queue.name,
                     conversation_id=str(conversation.id),
                     message_body=message_body,
+                    channel_label=channel_label,
                 )
                 roam_response = async_to_sync(self.roam_client.post_blocks)(
                     roam_group_id, blocks, color=color, thread_key=str(conversation.id)
@@ -205,28 +210,87 @@ class ConversationService:
         if conversation.status == ConversationStatus.CLOSED:
             raise ValueError("Cannot send messages to a closed conversation")
 
-        # 2. Idempotency check
+        message, created = self._append_customer_message(
+            conversation,
+            user_id=user_id,
+            sender_name=conversation.customer_name,
+            body=body,
+            idempotency_key=idempotency_key,
+            source=MessageSource.CUSTOMER_API,
+        )
+        if created:
+            # Mirror app messages into Slack (or other external channels) the conversation lives in.
+            CustomerDeliveryDispatcher().deliver_to_external_channels(
+                conversation, message, conversation.customer_name
+            )
+        return message
+
+    def append_external_message(
+        self,
+        conversation: Conversation,
+        *,
+        user_id: str,
+        sender_name: str,
+        body: str,
+        idempotency_key: str,
+        source: str,
+        metadata: dict | None = None,
+    ) -> Message:
+        """Add a customer message that arrived from an external channel such as Slack.
+
+        The caller has already authorized the sender (e.g. a member of the installed workspace),
+        so the sender is added as a participant rather than checked against the owner.
+        """
+        ConversationParticipant.objects.get_or_create(conversation=conversation, user_id=user_id)
+        message, _ = self._append_customer_message(
+            conversation,
+            user_id=user_id,
+            sender_name=sender_name,
+            body=body,
+            idempotency_key=idempotency_key,
+            source=source,
+            metadata=metadata,
+        )
+        return message
+
+    def _append_customer_message(
+        self,
+        conversation: Conversation,
+        *,
+        user_id: str,
+        sender_name: str,
+        body: str,
+        idempotency_key: str,
+        source: str,
+        metadata: dict | None = None,
+    ) -> tuple[Message, bool]:
+        """Store a customer message, reopen if needed, post it to Roam, and publish it over SSE.
+
+        Returns ``(message, created)``; ``created`` is False for a repeated idempotency key.
+        """
+        # 1. Idempotency check
         existing_event = EventLog.objects.filter(idempotency_key=idempotency_key).first()
         if existing_event:
-            return Message.objects.filter(
+            existing = Message.objects.filter(
                 conversation=conversation,
                 actor_id=user_id,
             ).order_by("-created_at").first()
+            return existing, False
 
-        # 3. Create message
+        # 2. Create message
         now = timezone.now()
         message = Message.objects.create(
             conversation=conversation,
             actor_type=ActorType.CUSTOMER,
             actor_id=user_id,
             direction=MessageDirection.INBOUND,
-            source=MessageSource.CUSTOMER_API,
+            source=source,
             body_plain=body,
             message_type=MessageType.TEXT,
-            metadata={"customer_name": conversation.customer_name},
+            metadata={"customer_name": sender_name, **(metadata or {})},
         )
 
-        # 4. Update conversation
+        # 3. Update conversation
         conversation.last_message_at = now
         update_fields = ["last_message_at"]
         if conversation.status in (ConversationStatus.WAITING_CUSTOMER, ConversationStatus.RESOLVED):
@@ -235,21 +299,21 @@ class ConversationService:
             update_fields.append("status")
         conversation.save(update_fields=update_fields)
 
-        # 5. Record event
+        # 4. Record event
         EventLog.objects.create(
             event_type="message.sent",
             idempotency_key=idempotency_key,
-            source="customer_api",
+            source=source,
             conversation=conversation,
             payload={"message_id": str(message.id)},
         )
 
-        # 6. Post to Roam
+        # 5. Post to Roam
         group_mapping = QueueGroupMapping.objects.filter(queue=conversation.queue, active=True).first()
         if group_mapping:
             try:
                 roam_text = format_customer_message(
-                    customer_name=conversation.customer_name,
+                    customer_name=sender_name,
                     org_name=conversation.customer_org_name,
                     message_body=body,
                 )
@@ -264,7 +328,7 @@ class ConversationService:
                 message.save(update_fields=["failed_at"])
                 logger.exception("Failed to post message to Roam for conversation %s", conversation.id)
 
-        # 7. Publish SSE event for real-time delivery
+        # 6. Publish SSE event for real-time delivery
         try:
             SSEPublisher().publish(
                 conversation_id=str(conversation.id),
@@ -274,7 +338,7 @@ class ConversationService:
         except Exception:
             logger.debug("Failed to publish SSE event for message %s", message.id, exc_info=True)
 
-        return message
+        return message, True
 
     # ------------------------------------------------------------------
     # Lifecycle transitions

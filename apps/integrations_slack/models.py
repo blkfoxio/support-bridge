@@ -40,3 +40,58 @@ class SlackInstallation(models.Model):
 
     def __str__(self):
         return f"{self.team_name or self.team_id} ({self.status})"
+
+
+class SlackChannel(models.Model):
+    """A channel (or DM) the bot is a member of in a customer workspace."""
+
+    id = models.BigAutoField(primary_key=True)
+    installation = models.ForeignKey(SlackInstallation, on_delete=models.CASCADE, related_name="channels")
+    channel_id = models.CharField(max_length=32)
+    name = models.CharField(max_length=255, default="", blank=True)
+    is_private = models.BooleanField(default=False)
+    is_im = models.BooleanField(default=False)
+    enabled = models.BooleanField(default=True, help_text="Disabled channels are ignored")
+    conversation_trigger = models.CharField(
+        max_length=20,
+        default="",
+        blank=True,
+        help_text="Overrides the org's conversation trigger when set (all_messages or emoji)",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["installation", "channel_id"], name="unique_slack_channel"),
+        ]
+
+    def __str__(self):
+        return f"#{self.name or self.channel_id} ({self.installation.team_id})"
+
+
+class SlackThread(models.Model):
+    """Maps a Slack thread (or a DM) to a conversation.
+
+    A conversation can have several rows (e.g. merged top-level posts). A thread can map
+    to a newer conversation after the old one closes, so lookups take the newest row.
+    DMs use an empty ``thread_ts`` and post flat, without threading.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    conversation = models.ForeignKey(
+        "conversations.Conversation", on_delete=models.CASCADE, related_name="slack_threads"
+    )
+    team_id = models.CharField(max_length=32)
+    channel_id = models.CharField(max_length=32)
+    thread_ts = models.CharField(max_length=32, default="", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["team_id", "channel_id", "thread_ts"], name="idx_slack_thread_lookup"),
+        ]
+
+    def __str__(self):
+        return f"{self.team_id}/{self.channel_id}/{self.thread_ts or 'dm'} → {self.conversation_id}"

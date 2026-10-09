@@ -15,7 +15,8 @@ from apps.organizations.models import Organization
 
 from . import oauth
 from .client import SlackApiError
-from .services import InstallConflictError, deactivate_installation, notify_installer, record_installation
+from .services import InstallConflictError, notify_installer, record_installation
+from .tasks import process_slack_event
 from .verification import verify_slack_signature
 
 logger = logging.getLogger(__name__)
@@ -111,10 +112,11 @@ def events(request):
         return JsonResponse({"challenge": payload.get("challenge", "")})
 
     if payload.get("type") == "event_callback":
-        event = payload.get("event") or {}
-        team_id = payload.get("team_id", "")
-        if event.get("type") in ("app_uninstalled", "tokens_revoked"):
-            deactivate_installation(team_id, reason=event["type"])
-        # Message handling arrives in phase 4; acknowledge everything else.
+        # Slack requires an ack within 3 seconds, so the work happens in Celery.
+        try:
+            process_slack_event.delay(payload)
+        except Exception:
+            logger.exception("Failed to enqueue Slack event %s", payload.get("event_id"))
+            return HttpResponse(status=500)  # Slack will retry
 
     return HttpResponse(status=200)

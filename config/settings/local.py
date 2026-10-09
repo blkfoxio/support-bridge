@@ -37,3 +37,4 @@ if os.environ.get("USE_SQLITE", "").lower() in ("1", "true", "yes") or "pytest" 
         }
     }
     CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}  # noqa: F405
+    CELERY_TASK_ALWAYS_EAGER = True

@@ -1,6 +1,11 @@
 from django.db import models
 
 
+class SlackConversationTrigger(models.TextChoices):
+    ALL_MESSAGES = "all_messages", "Every top-level message"
+    EMOJI = "emoji", "Only messages given the trigger emoji"
+
+
 class Organization(models.Model):
     """A customer organization, keyed by the Cyflare ONE org ID.
 
@@ -21,6 +26,21 @@ class Organization(models.Model):
     slack_merge_window_minutes = models.PositiveIntegerField(
         default=30,
         help_text="Top-level Slack posts from the same person within this window join their open conversation",
+    )
+    slack_conversation_trigger = models.CharField(
+        max_length=20,
+        choices=SlackConversationTrigger.choices,
+        default=SlackConversationTrigger.ALL_MESSAGES,
+        help_text="What starts a conversation in a Slack channel (channels can override)",
+    )
+    slack_trigger_emoji = models.CharField(
+        max_length=64, default="speech_balloon", help_text="Reaction name used when the trigger is 'emoji'"
+    )
+    slack_auto_join_pattern = models.CharField(
+        max_length=100,
+        default="",
+        blank=True,
+        help_text="Glob for public channel names the bot joins automatically, e.g. cyflare-*",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)

@@ -49,3 +49,19 @@ class SlackClient:
         if thread_ts:
             payload["thread_ts"] = thread_ts
         return self.call("chat.postMessage", json=payload)
+
+    # Read methods take form-encoded bodies.
+    def user_info(self, user_id: str) -> dict:
+        return self.call("users.info", data={"user": user_id})["user"]
+
+    def conversation_info(self, channel: str) -> dict:
+        return self.call("conversations.info", data={"channel": channel})["channel"]
+
+    def get_message(self, channel: str, ts: str) -> dict | None:
+        messages = self.call(
+            "conversations.history", data={"channel": channel, "latest": ts, "inclusive": "true", "limit": 1}
+        ).get("messages", [])
+        return messages[0] if messages and messages[0].get("ts") == ts else None
+
+    def join_channel(self, channel: str) -> dict:
+        return self.call("conversations.join", data={"channel": channel})

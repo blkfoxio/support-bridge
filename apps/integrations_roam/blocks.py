@@ -82,6 +82,7 @@ def build_root_message_blocks(
     queue_name: str,
     conversation_id: str,
     message_body: str,
+    channel_label: str = "",
 ) -> tuple[list[dict], str]:
     """Build Block Kit blocks + color for a new conversation root message.
 
@@ -98,10 +99,11 @@ def build_root_message_blocks(
         body = body[:_MAX_BODY_LENGTH] + "\n\n_(message truncated)_"
 
     resolve_url = resolve_action_url(conversation_id)
+    via = f" · via {channel_label}" if channel_label else ""
 
     blocks = [
         header(theme["header_text"]),
-        section(f"*Customer:* {customer_name} ({customer_email})"),
+        section(f"*Customer:* {customer_name} ({customer_email}){via}"),
         section(f"*Organization:* {org_name} (ID: {org_id})"),
         context([
             f"*Tier:* {tier}",

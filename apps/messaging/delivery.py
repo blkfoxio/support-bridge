@@ -90,6 +90,10 @@ class CustomerDeliveryDispatcher:
         except Exception:
             logger.exception("Failed to send push notification for message %s", message.id)
 
+        self.deliver_to_external_channels(conversation, message, sender_name)
+
+    def deliver_to_external_channels(self, conversation: Conversation, message: Message, sender_name: str) -> None:
+        """Mirror a message into external channels (e.g. the Slack thread) without SSE or push."""
         for deliverer in _channel_deliverers:
             try:
                 if deliverer.applies_to(conversation):
